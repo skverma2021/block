@@ -143,24 +143,27 @@ async function flushPendingBroadcasts() {
         pending.attempts++;
         pending.lastAttempt = new Date().toISOString();
         
-        try {
-            const broadcastPromises = pending.targetUrls.map(url =>
+        const results = await Promise.all(
+            pending.targetUrls.map(url =>
                 axios.post(`${url}/api/transactions/receive`, pending.transaction, { timeout: config.BROADCAST_TIMEOUT_MS })
+                    .then(() => true)
                     .catch(err => {
                         console.warn(`Network Module: Retry broadcast to ${url} failed: ${err.message}`);
-                        return null;
+                        return false;
                     })
-            );
-            
-            await Promise.all(broadcastPromises);
+            )
+        );
+
+        const anySucceeded = results.some(r => r === true);
+        if (anySucceeded) {
             console.log(`Network Module: Successfully retried broadcast for transaction ${pending.transaction.transactionId}`);
-        } catch (error) {
-            console.error(`Network Module: Failed to retry broadcast for ${pending.transaction.transactionId}: ${error.message}`);
-            // Re-queue if under the retry limit.
+        } else {
+            // All URLs failed — re-queue if under the retry limit.
             if (pending.attempts < config.MAX_BROADCAST_RETRIES) {
+                console.warn(`Network Module: All URLs failed for tx ${pending.transaction.transactionId}. Re-queuing (attempt ${pending.attempts}/${config.MAX_BROADCAST_RETRIES}).`);
                 pendingBroadcasts.push(pending);
             } else {
-                console.error(`Network Module: Giving up on transaction ${pending.transaction.transactionId} after ${pending.attempts} attempts`);
+                console.error(`Network Module: Giving up on transaction ${pending.transaction.transactionId} after ${pending.attempts} attempts.`);
             }
         }
     }

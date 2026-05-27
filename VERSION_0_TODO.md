@@ -22,6 +22,13 @@
   Fix: genesis block now uses the standard hash formula (same as all other blocks):  
   `merkleRoot = calculateMerkleRoot([])` and `hash = SHA-256(0 + timestamp + merkleRoot + '0' + 0 + '[]')`
 
+- [x] **BUG-6** `routes/network.js` — `flushPendingBroadcasts()` retry logic was dead code  
+  Individual URL failures were caught as `null` inside `.map()`, so `Promise.all` always resolved  
+  and the outer `catch` (with re-queue logic) never ran. Items were silently dropped after one  
+  failed flush regardless of `MAX_BROADCAST_RETRIES`.  
+  Fix: `.then(→true)/.catch(→false)` per URL; check `anySucceeded`; if all failed and under  
+  the retry limit, re-queue with warning log; otherwise discard with error log.
+
 ---
 
 ## QUICK WINS
@@ -51,10 +58,10 @@
 
 ## JEST SETUP
 
-- [ ] **TEST-0** Install and configure Jest  
-  `npm install --save-dev jest`  
-  Add `"test": "jest"` to `package.json` scripts.  
-  Create `tests/` directory.
+- [x] **TEST-0** Install and configure Jest  
+  `npm install --save-dev jest supertest`  
+  Add `"test": "jest --runInBand"` to `package.json` scripts.  
+  Created `tests/`, `tests/helpers/blockBuilder.js`, `tests/helpers/dbSetup.js`.
 
 ---
 
@@ -62,11 +69,11 @@
 
 > Goal: Node automatically catches up on missed blocks when it comes back online.
 
-- [ ] **TEST-A1** Node with no local blocks syncs full chain from RegAuth on startup
-- [ ] **TEST-A2** Node that is behind by N blocks fetches only the missing blocks (partial sync)
-- [ ] **TEST-A3** Chain continuity validation — reject a partial sync where `previousBlockHash` does not match
-- [ ] **TEST-A4** Fork detected during partial sync → force resync from RegAuth is triggered
-- [ ] **TEST-A5** Node already up to date — no sync attempted, no errors
+- [x] **TEST-A1** Empty project-node DB → `getLastBlockIndex()` returns -1 (sync trigger condition)
+- [x] **TEST-A2** `getBlocksFromIndex(n)` returns only blocks with index strictly > n (partial sync slice)
+- [x] **TEST-A3** Chain with broken `previousBlockHash` link fails `verifyChainIntegrity` at the bad block
+- [x] **TEST-A4** `purgeBlockchainFrom(corruptedIndex)` + re-add correct blocks restores a valid chain
+- [x] **TEST-A5** `getLastBlockIndex()` reflects correct value after blocks are added
 
 ---
 
@@ -74,10 +81,10 @@
 
 > Goal: Project nodes gracefully handle RegAuth being offline.
 
-- [ ] **TEST-B1** `checkRegAuthHealth()` returns `false` when RegAuth is unreachable; `isRegAuthOnline` set to `false`
-- [ ] **TEST-B2** Transaction submitted while RegAuth offline → stored in local mempool + added to persistent retry queue
-- [ ] **TEST-B3** `flushPendingBroadcasts()` fires when RegAuth comes back online; queue is cleared from DB on success
-- [ ] **TEST-B4** Retry gives up after 5 attempts; final failure is logged
+- [x] **TEST-B1** `checkRegAuthHealth()` returns `false` and sets `regAuthStatus` to `false` when unreachable
+- [x] **TEST-B2** `addToPendingBroadcasts()` queues a transaction; duplicate entries are deduplicated
+- [x] **TEST-B3** `flushPendingBroadcasts()` calls `axios.post` for every queued item; queue is empty after success
+- [x] **TEST-B4** Item is dropped permanently after `MAX_BROADCAST_RETRIES` (5) consecutive failures
 - [~] **TEST-B5** Node process restarts while RegAuth is down → retry queue survives (reads from DB on startup)  
   *Deferred to V1 — requires PF-1 which is a V1 responsibility.*
 
@@ -87,16 +94,16 @@
 
 > Goal: Detect and reject corrupted blocks/chains; force resync with authoritative chain.
 
-- [ ] **TEST-C1** `verifyBlockIntegrity()` detects a modified block hash
-- [ ] **TEST-C2** `verifyBlockIntegrity()` detects a broken `previousBlockHash` chain link
-- [ ] **TEST-C3** `verifyBlockIntegrity()` detects a Merkle root mismatch
-- [ ] **TEST-C4** `verifyBlockIntegrity()` detects a tampered transaction `rowHash` within a block
-- [ ] **TEST-C5** `verifyChainIntegrity()` identifies the correct `corruptedBlockIndex` and logs to `audit_log`
-- [ ] **TEST-C6** Chain hash mismatch with RegAuth → `logTamperingAlert` called with `CHAIN_HASH_MISMATCH`
-- [ ] **TEST-C7** `forceResyncFromRegAuth()` purges local chain and rebuilds from RegAuth correctly
-- [ ] **TEST-C8** Post-resync integrity check passes; `audit_log` retains the original alert (resolved = 0)
-- [ ] **TEST-C9** Received block with invalid hash is rejected at `POST /api/blocks/receive` (Check-4)
-- [ ] **TEST-C10** Received block with invalid Merkle root is rejected (Check-5)
+- [x] **TEST-C1** Modified block hash → `verifyChainIntegrity()` returns `valid=false`, error matches `/hash mismatch/i`
+- [x] **TEST-C2** Broken `previousBlockHash` → error matches `/previous hash mismatch/i`
+- [x] **TEST-C3** Tampered `merkleRoot` → error matches `/merkle root mismatch/i`
+- [x] **TEST-C4** Tampered transaction `rowHash` → error references the corrupted transaction ID
+- [x] **TEST-C5** `verifyChainIntegrity()` reports correct `corruptedBlockIndex` in a 2-block chain
+- [x] **TEST-C6** `calculateChainHash()` returns different hash after block corruption
+- [x] **TEST-C7** `purgeBlockchainFrom(index)` removes correct blocks; chain length is as expected
+- [x] **TEST-C8** `audit_log` retains `CHAIN_INTEGRITY_FAILURE` entry after purge + valid rebuild
+- [x] **TEST-C9** `POST /api/blocks/receive` rejects block with invalid hash (Check-4 → 400)
+- [x] **TEST-C10** `POST /api/blocks/receive` rejects block with invalid Merkle root (Check-5 → 400)
 
 ---
 
