@@ -1,0 +1,271 @@
+Project Summary: Blockchain PoC (Proof of Concept)
+This is a private blockchain network implementation for environmental monitoring data, built with Node.js/Express and SQLite.
+
+Architecture
+Multi-node network with role-based nodes:
+RegAuth (Node 0): Regulatory authority that mines blocks
+Project Nodes (1, 2, etc.): Submit and receive transactions/blocks
+
+Core Features
+Component	        Purpose
+db.js:              SQLite persistence with tables for blockchain, mempool, and confirmed transactions
+transactions.js:    Submit new transactions, receive broadcasts, hash validation
+blocks.js:          Mining logic with Merkle tree, block creation, and broadcasting
+network.js:         Peer discovery, node registration, network topology management
+
+Key Characteristics
+Proof of Authority (PoA) consensus - only RegAuth mines blocks
+Auto-mining triggers when mempool reaches 5 transactions (every 10 seconds check)
+Transaction data: Environmental readings (SO2, NO2, PM10, PM2.5) from monitoring stations
+Integrity: SHA-256 hashing on transactions and blocks, Merkle root calculation
+Sync: Non-RegAuth nodes sync the full chain from RegAuth on startup
+
+Tech Stack
+Express 5.1, SQLite3, Axios (for node communication), UUID, SHA256, CORS enabled
+
+
+TASK:
+Currently the function startServer only attempt to sync if this is NOT the RegAuth node 
+and it has no blocks. Please prepare a TODO list for the scenario: it is a project node,
+has a few blocks, and was down for sometime.
+
+COPILOT:
+Here's the TODO list for handling the "project node that was down and needs to catch up" scenario:
+
+Task    Description
+1	    Compare local chain height with RegAuth	On startup, fetch RegAuth's latest block index and compare with local lastBlock.blockIndex
+2	    Fetch missing blocks from RegAuth	Create endpoint like /api/blocks/chain-from/:startIndex to retrieve only blocks after the local chain's last block
+3	    Validate block chain continuity	Verify each received block's previousBlockHash matches the prior block's hash before accepting
+4	    Add missing blocks to local DB	Insert the validated blocks sequentially using db.addBlockToBlockchain()
+5	    Clear synced txs from mempool	Remove any transactions from mempool that appear in the newly synced blocks
+6	    Handle chain fork conflicts	Decide policy if local chain diverged (e.g., trust RegAuth's chain as canonical and rollback local)
+
+The key change to index.js:52-54 would replace:
+if (!lastBlockOnThisChain && String(REG_AUTH_ID) !== '0') 
+with logic that also syncs when: 
+lastBlockOnThisChain.blockIndex < regAuthLastBlockIndex.
+
+Would you like me to implement these changes?
+
+TASK
+Yes Please
+
+COPILOT
+Now I'll update the sync logic in index.js to handle the partial sync scenario:
+
+All changes implemented successfully. Here's a summary:
+
+Changes Made
+1. db.js - Added 2 new functions:
+
+getLastBlockIndex() - Quick lookup for chain height comparison
+getBlocksFromIndex(startIndex) - Fetches blocks after a given index for partial sync
+2. blocks.js - Added 2 new endpoints:
+
+GET /api/blocks/last-index - Returns last block index
+GET /api/blocks/chain-from/:startIndex - Returns blocks after specified index
+3. index.js:46-125 - Rewrote sync logic to handle:
+
+Fresh nodes (no blocks) → Full sync from RegAuth
+Nodes that were down (partial blocks) → Partial sync of only missing blocks
+Chain continuity validation before accepting blocks
+Fork detection with warning (manual intervention needed for PoC)
+Up-to-date detection skips unnecessary syncing
+
+Sync Flow for Project Nodes
+1. Compare local index vs RegAuth index
+2. If behind → fetch missing blocks via /chain-from/:index
+3. Validate previousBlockHash chain continuity
+4. Add valid blocks to local DB
+5. Remove synced transactions from mempool
+6. Warn if fork detected
+
+TASK:
+Please prepare a TODO list for the following scenario:
+RegAuth Goes Down: Here the goal is - Project nodes to gracefully handle 
+RegAuth's unavailability for block creation and transaction confirmation.
+
+COPILOT:
+Here's the TODO list for handling RegAuth unavailability:
+
+#	Task	Description
+1	Add RegAuth health check endpoint	Create GET /api/network/health on RegAuth that project nodes can ping to verify availability
+2	Implement heartbeat monitoring	Project nodes periodically ping RegAuth (e.g., every 30s) and track isRegAuthOnline status flag
+3	Graceful broadcast failure handling	Wrap transaction/block broadcasts in try-catch; don't fail the local transaction if RegAuth is unreachable
+4	Queue failed broadcasts for retry	Store failed broadcast transactions in a retry queue (memory or DB table pending_broadcasts)
+5	Auto-retry when RegAuth recovers	When heartbeat detects RegAuth is back online, flush the retry queue and resend pending transactions
+6	Expose RegAuth status via API	Add GET /api/network/regauth-status endpoint so frontends can display connectivity status to users
+Key Behavior Changes
+Current behavior:
+Current behavior:
+
+Transaction submit fails entirely if RegAuth broadcast fails
+No visibility into RegAuth status
+Transactions lost if broadcast fails
+Target behavior:
+
+Transactions always accepted locally (mempool)
+Broadcast failures are non-blocking and queued
+Users see "Pending sync" status when RegAuth is down
+Auto-recovery when RegAuth comes back
+Would you like me to implement these changes?
+
+TASK:
+Please go ahead
+
+COPILOT:
+Now I'll implement all the features. Let me start with the network.js changes (health endpoint and RegAuth status tracking), then transactions.js (graceful handling and retry queue), and finally index.js (heartbeat monitoring).
+
+Now let me add the heartbeat monitoring in index.js:
+
+All features implemented successfully. Here's a summary:
+
+Changes Made
+1. network.js - Added:
+
+GET /api/network/health - Health check endpoint for nodes to ping
+GET /api/network/regauth-status - Returns RegAuth connectivity status and pending queue count
+checkRegAuthHealth() - Function to ping RegAuth (triggers retry flush when back online)
+addToPendingBroadcasts() - Queue failed broadcast transactions
+flushPendingBroadcasts() - Retry all queued transactions (max 5 attempts)
+
+2. transactions.js - Updated /submit:
+
+Transaction always saved to local mempool first
+Broadcasts are now non-blocking (failures don't fail the request)
+Failed broadcasts automatically queued for retry
+Response includes broadcastStatus with success/fail counts
+3. index.js:159-170 - Added heartbeat for project nodes:
+
+Pings RegAuth every 30 seconds
+Tracks isRegAuthOnline status
+Auto-flushes retry queue when RegAuth recovers
+Graceful shutdown clears heartbeat interval
+New API Endpoints
+
+Endpoint	Purpose
+GET /api/network/health	Check if this node is online
+GET /api/network/regauth-status	Get RegAuth connectivity status + pending queue size
+Behavior When RegAuth is Down
+Transactions still accepted locally ✓
+Broadcast failures logged but not blocking ✓
+Failed broadcasts queued for retry ✓
+Heartbeat detects when RegAuth comes back ✓
+Pending queue auto-flushed on recovery ✓
+
+TASK:
+Please prepare a TODO list for the following scenario:
+How to Handle an Attempted Manipulation by a Bad Actor: 
+Here the goal is to detect and reject corrupted blocks/chains on a local node, and force resynchronization with the authoritative chain.
+
+COPILOT:
+Here's the TODO list for handling Bad Actor Manipulation:
+
+#	Task	Description
+1	Add chain integrity verification	Create verifyChainIntegrity() function that validates all block hashes, previous hash links, Merkle roots, and transaction hashes from genesis to tip
+2	Periodic local chain validation	Run integrity check on startup and periodically (e.g., every 5 minutes) to detect any local DB tampering
+3	Compare local hash with RegAuth	Add endpoint GET /api/blocks/chain-hash that returns hash of entire chain; project nodes compare their chain hash against RegAuth's
+4	Implement chain rollback/purge	Create purgeBlockchain() function to delete corrupted blocks and move their transactions back to mempool or discard
+5	Force resync from RegAuth	After purge, trigger full chain download from RegAuth and rebuild local state
+6	Log tampering alerts	Create audit log table to record detected tampering events with timestamps, block indices, and expected vs actual hashes
+Detection Points
+Detection Points
+Check	What it catches
+Block hash validation	Direct modification of block data
+Previous hash chain	Inserted/deleted blocks
+Merkle root validation	Modified transactions within a block
+Transaction rowHash	Individual transaction tampering
+Chain hash comparison	Any divergence from authoritative chain
+Response Flow
+1. Detect corruption (any validation fails)
+   ↓
+2. Log tampering alert with details
+   ↓
+3. Quarantine local chain (mark as untrusted)
+   ↓
+4. Purge corrupted blocks from local DB
+   ↓
+5. Force full resync from RegAuth
+   ↓
+6. Re-validate after sync
+
+Key Principle
+Since RegAuth is the sole authority in this PoA system, any local chain that doesn't match RegAuth is considered corrupted and must be replaced entirely.
+
+Would you like me to implement these changes?
+
+TASK:
+Go ahead
+COPILOT:
+Now I'll implement all the security features. Let me start with the database functions:
+
+Now let me add periodic validation and force resync logic to index.js:
+
+All security features implemented successfully. Here's a summary:
+
+Changes Made
+1. db.js - Added security functions:
+
+audit_log table for tampering event records
+logTamperingAlert() - Records security events with severity levels
+getUnresolvedAlerts() - Retrieves active alerts
+verifyBlockIntegrity() - Validates a single block (hash, merkle, prevHash, tx hashes)
+verifyChainIntegrity() - Full chain validation from genesis to tip
+calculateChainHash() - Rolling hash of all block hashes for comparison
+purgeBlockchainFrom(index) - Delete blocks from a specific index
+purgeEntireBlockchain() - Full chain purge for resync
+2. blocks.js - Added endpoints:
+
+GET /api/blocks/chain-hash - Returns chain hash for comparison with RegAuth
+GET /api/blocks/verify-integrity - Runs full integrity check
+GET /api/blocks/security-alerts - Returns unresolved tampering alerts
+3. index.js - Added:
+
+forceResyncFromRegAuth() - Purges local chain and downloads fresh from RegAuth
+performIntegrityCheck() - Validates local chain + compares hash with RegAuth
+Periodic integrity check every 5 minutes
+Initial integrity check on startup
+Auto force-resync when tampering detected
+Detection & Response Flow
+Tampering Detected (any of):
+├── Block hash mismatch
+├── Previous hash chain broken
+├── Merkle root mismatch
+├── Transaction hash mismatch
+└── Chain hash != RegAuth hash
+        ↓
+Log to audit_log (CRITICAL)
+        ↓
+Purge corrupted blocks
+        ↓
+Force resync from RegAuth
+        ↓
+Verify post-resync integrity
+
+TASK:
+Are you done with the job?
+
+COPILOT:
+Yes, all three scenarios have been fully implemented:
+
+Scenario	Status	Key Features Added
+Project Node Catch-Up	✅ Complete	Partial sync from RegAuth, chain continuity validation
+RegAuth Goes Down	✅ Complete	Heartbeat monitoring, retry queue, graceful degradation
+Bad Actor Manipulation	✅ Complete	Integrity checks, tampering detection, auto force-resync
+New API Endpoints Summary
+Endpoint	Purpose
+GET /api/blocks/last-index	Get latest block index
+GET /api/blocks/chain-from/:index	Partial chain sync
+GET /api/blocks/chain-hash	Chain hash for comparison
+GET /api/blocks/verify-integrity	Run integrity check
+GET /api/blocks/security-alerts	View tampering alerts
+GET /api/network/health	Health check ping
+GET /api/network/regauth-status	RegAuth connectivity status
+
+Files Modified
+db.js - Database functions + security verification
+blocks.js - New block endpoints
+network.js - Health + retry queue
+transactions.js - Graceful broadcast handling
+index.js - Sync logic + heartbeat + integrity checks
+Would you like me to test any of these features or make additional changes?
