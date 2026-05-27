@@ -2,37 +2,37 @@
 
 ## BUG FIXES
 
-- [ ] **BUG-1** `routes/blocks.js` ~line 92  
-  Block broadcast URL is missing the `/api` prefix.  
-  `axios.post(\`${networkNodeUrl}/blocks/receive\`)` → `/api/blocks/receive`
+- [x] **BUG-1** `routes/blocks.js`, `routes/transactions.js`, `routes/network.js`  
+  All inter-node broadcast URLs were missing the `/api` prefix. Fixed in all 5 locations.
 
-- [ ] **BUG-2** `routes/network.js` — `flushPendingBroadcasts()`  
-  Transaction retry URL is missing the `/api` prefix.  
-  `${url}/transactions/receive` → `${url}/api/transactions/receive`
+- [x] **BUG-2** `routes/network.js` — `flushPendingBroadcasts()`  
+  Transaction retry URL fixed: `${url}/api/transactions/receive`
 
-- [ ] **BUG-3** `routes/network.js` — `module.exports`  
-  `myNodeUrl` is exported as a value snapshot (always `''`).  
-  Change to a getter, same pattern already used for `regAuthStatus`:  
-  ```js
-  get myNodeUrl() { return myNodeUrl; }
-  ```
+- [x] **BUG-3** `routes/network.js` — `module.exports`  
+  `myNodeUrl` now exported as a getter: `get myNodeUrl() { return myNodeUrl; }`
 
-- [ ] **BUG-4** `REG_AUTH_URL` hardcoded as `http://localhost:3000` in TWO files  
-  (`index.js` line 27 and `routes/network.js` line 11)  
-  Add as a 5th CLI argument: `node index.js <port> <myUrl> <projId> <dbFile> <regAuthUrl>`  
-  Both files read from the passed-in value. Required for cross-machine demo.
+- [x] **BUG-4** `REG_AUTH_URL` hardcoded — now the 6th CLI argument in both files  
+  `node index.js <port> <myUrl> <projId> <dbFile> <regAuthUrl>`  
+  Defaults to `http://localhost:3000` if omitted (backward compatible).  
+  `routes/network.js` exposes `setRegAuthUrl()` and receives the value from `index.js` on startup.
+
+- [x] **BUG-5** `db.js` — genesis block hash and Merkle root used unique sentinel values  
+  (`SHA-256('regulator_genesis_block_v1')` and `SHA-256('genesis_merkle_root_v1')`) that  
+  `verifyBlockIntegrity()` can never reproduce — causing a self-purge on every RegAuth restart.  
+  Fix: genesis block now uses the standard hash formula (same as all other blocks):  
+  `merkleRoot = calculateMerkleRoot([])` and `hash = SHA-256(0 + timestamp + merkleRoot + '0' + 0 + '[]')`
 
 ---
 
 ## QUICK WINS
 
-- [ ] **QW-1** `db.js` — UUID v4 → v7  
+- [x] **QW-1** `db.js` — UUID v4 → v7  
   `uuidv4()` → `uuidv7()` (already available in `uuid` v11, zero new dependency)
 
-- [ ] **QW-2** `package.json` — Remove unused `sha256` dependency  
+- [x] **QW-2** `package.json` — Remove unused `sha256` dependency  
   All hashing uses Node's built-in `crypto`. Run `npm uninstall sha256`.
 
-- [ ] **QW-3** Consolidate duplicate threshold constants  
+- [x] **QW-3** Consolidate duplicate threshold constants  
   `MINE_THRESHOLD = 5` in `index.js` and `BLOCK_SIZE = 5` in `routes/blocks.js`  
   Define once (e.g. in a `config.js`) and import in both files.
 
@@ -40,12 +40,12 @@
 
 ## PERSISTENCE FIX
 
-- [ ] **PF-1** `routes/network.js` — Persist retry queue to SQLite  
-  `pendingBroadcasts` is an in-memory array — lost on process restart.  
-  Add a `pending_broadcasts` table to `db.js` (columns: `transaction_id`, `target_url`,
-  `attempts`, `last_attempt`, `transaction_json`).  
-  `addToPendingBroadcasts` writes to DB; `flushPendingBroadcasts` reads and clears from DB.  
-  Required for Scenario B to be honest about durability.
+- [~] **PF-1** `routes/network.js` — Persist retry queue to SQLite  
+  **Deferred to V1.** `pendingBroadcasts` is an in-memory array — lost on process restart.  
+  For V0 this is acceptable: transactions remain safely in the local SQLite mempool; only  
+  the delivery-retry intent is lost. In V1 this will be replaced by a proper job queue  
+  (BullMQ or a PostgreSQL-backed queue) — hand-rolling a SQLite solution here would be  
+  thrown away immediately. TEST-B5 is marked as a V1 responsibility accordingly.
 
 ---
 
@@ -78,7 +78,8 @@
 - [ ] **TEST-B2** Transaction submitted while RegAuth offline → stored in local mempool + added to persistent retry queue
 - [ ] **TEST-B3** `flushPendingBroadcasts()` fires when RegAuth comes back online; queue is cleared from DB on success
 - [ ] **TEST-B4** Retry gives up after 5 attempts; final failure is logged
-- [ ] **TEST-B5** Node process restarts while RegAuth is down → retry queue survives (reads from DB on startup)
+- [~] **TEST-B5** Node process restarts while RegAuth is down → retry queue survives (reads from DB on startup)  
+  *Deferred to V1 — requires PF-1 which is a V1 responsibility.*
 
 ---
 

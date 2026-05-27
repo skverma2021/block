@@ -1,100 +1,127 @@
 # 06 — Roadmap
 
-## Version 0 — Current (JS PoC, bug fixes + tests)
+## Strategic Direction
 
-**Goal**: Get the existing Node.js codebase to a state that is correct, tested, and presentable.
+This project follows a deliberate three-stage path, each stage serving a distinct purpose:
+
+| Version | Architecture | Purpose |
+|---|---|---|
+| **V0** | Custom PoA blockchain + minimal frontend | Demonstrate *why naive blockchain is not enough* |
+| **V1** | Signed append-only log + RFC 3161 timestamps | Actual production candidate |
+| **V2** | Hyperledger Fabric | Only if a named multi-party consortium is confirmed |
+
+The key insight driving this strategy: V0 is a tamper-evident audit log with replication — useful, but not a trustless system. A single authority (RegAuth) controls the chain, so the trust model collapses to "trust RegAuth." V1 solves this with a simpler, legally-defensible architecture.
+
+---
+
+## Version 0 — PoA Blockchain Demo (current)
+
+**Goal**: A working demo that honestly illustrates both the value and the limitations of a naively centralised blockchain.
 
 ### Scope
-- Fix BUG-1 through BUG-4 (inter-node communication, hardcoded URLs)
-- Quick wins: UUID v7, remove unused `sha256` package
-- Add Jest: unit tests, integration tests, chain integrity tests
-- Refactor complete: `config.js`, section headers, JSDoc, `.gitignore`
+- [x] Core blockchain: mempool, mining, chain sync, integrity checks
+- [x] BUG-1 through BUG-5 fixed
+- [x] Refactored: `config.js`, section headers, JSDoc, `.gitignore`
+- [ ] Quick wins: UUID v7, remove unused `sha256` package
+- [ ] Jest: unit tests, integration tests, chain integrity tests
+- [ ] Minimal frontend (chain explorer + transaction submission UI)
 
 ### Completion criteria
-- All four nodes start, register, and exchange blocks correctly
-- `npm test` runs 20+ Jest tests, all passing
-- No hardcoded URLs; any topology can be configured via CLI args
+- All nodes start, register, and exchange blocks correctly
+- `npm test` passes all Jest scenarios
+- Frontend makes the limitation visible: "Who controls RegAuth controls the chain"
+
+### Known Limitations (by design — the demo's point)
+- Single miner: RegAuth is the sole block producer; a compromised RegAuth rewrites history
+- Centralised sync: project nodes unconditionally trust RegAuth's chain
+- No cryptographic identity: `projId` is a string argument, not a verified credential
+- No legal standing: block timestamps are unverified node clocks
 
 ---
 
-## Version 1 — Rewrite (NestJS / TypeScript / PostgreSQL / Docker)
+## Version 1 — Signed Append-Only Log (production candidate)
 
-**Goal**: Production-grade architecture. Still PoA blockchain, same domain, but enterprise stack.
+**Goal**: Replace the blockchain structure with a simpler architecture that delivers *more* practical trust at a fraction of the operational cost.
 
-### Tech Stack Changes
+### Why this beats V0's blockchain for this use case
+- Each record is signed by the *submitting party's private key* — RegAuth cannot forge a past entry even if it controls the database
+- RFC 3161 timestamps are court-admissible in most jurisdictions (financial and pharmaceutical industries rely on them)
+- Individual records are self-verifiable without the full chain
+- No mining interval, no block accumulation delay, no chain sync protocol
 
-| Layer | V0 | V1 |
+### Tech Stack
+
+| Layer | Choice | Rationale |
 |---|---|---|
-| Language | JavaScript | TypeScript (strict) |
-| Framework | Express 5 | NestJS (modules, DI, guards, pipes) |
-| ORM | Raw SQL callbacks | Prisma |
-| Database | SQLite per node | PostgreSQL (per environment) |
-| Containerisation | None | Docker + Docker Compose |
-| Frontend | None | React (Vite) + Tailwind |
-| Auth | None | JWT (RegAuth issues tokens) |
-| Logging | `console.log` | Pino (structured JSON logs) |
-| Config | `config.js` | NestJS `ConfigModule` + `.env` |
-| Testing | Jest (V0) | Jest + Supertest (carried over, expanded) |
+| Language | TypeScript (strict) | Type safety, better tooling |
+| Framework | NestJS | Modules, DI, guards, pipes |
+| Database | PostgreSQL (insert-only) | Standard, auditable, hosted anywhere |
+| ORM | Prisma | Schema-as-code, migrations |
+| Signing | Ed25519 (Node.js `crypto`) | Fast, small keys, well-supported |
+| Timestamping | RFC 3161 TSA (e.g. Sectigo free TSA) | Legally recognised, neutral third party |
+| Containerisation | Docker + Docker Compose | Reproducible deployments |
+| Frontend | React (Vite) + Tailwind | Chain explorer + submission UI |
+| Auth | JWT (NestJS guard) | Submitter identity tied to signing key |
+| Testing | Jest + Supertest | Carried over and expanded from V0 |
 
-### Migration Estimates
+### Trust Model
+- Submitter signs each record with their Ed25519 private key before posting
+- Server stores the signature alongside the record — cannot be altered without detection
+- RFC 3161 timestamp is requested at insert time and stored — proves the record existed before that moment
+- Auditors verify: signature (who submitted) + timestamp (when) + hash (content unchanged)
+- Database admin access does not defeat this — signed rows cannot be silently forged
 
-| Component | Effort |
-|---|---|
-| RegAuth node | ~32 person-months (full feature parity + frontend + auth) |
-| First project node | ~6.5 person-months |
-| Each subsequent project node | ~2.5 person-months |
+### Key Design Decisions (to resolve at kickoff)
+- Does each project organisation manage its own signing key, or does a central CA issue them?
+- Single shared PostgreSQL instance (row-level org isolation) or separate schema per org?
+- Read-only public explorer vs. authenticated submission only?
 
-### Key V1 Design Decisions (Pending)
-
-- **P2P transport**: Keep REST, or move to WebSocket / gRPC for block/tx propagation?
-- **Chain storage**: Separate PostgreSQL schema per project, or shared with row-level isolation?
-- **Frontend scope**: Read-only explorer first; submission UI in a later sprint?
-- **JWT authority**: Does RegAuth issue tokens? Or external OAuth provider?
+### Effort Estimate (solo developer)
+- Core API + signing + TSA integration: ~3 weeks
+- PostgreSQL schema + Prisma setup: ~3 days
+- Frontend (explorer + submission): ~2 weeks
+- Docker + CI: ~3 days
+- Jest coverage: ~1 week
+- **Total: ~6–7 weeks**
 
 ---
 
-## Version 2 — Hyperledger Fabric (Exploration)
+## Version 2 — Hyperledger Fabric (conditional)
 
-**Goal**: Replace the custom blockchain implementation with a production-grade permissioned blockchain framework.
+**Goal**: Replace the single-authority model with genuine multi-party consensus where no single organisation controls the chain.
 
-### Why Fabric?
-- Battle-tested permissioned blockchain
-- Pluggable consensus (RAFT for ordering)
-- Smart contracts (chaincode) replace the mining + block logic
-- Built-in identity management (MSP, certificates)
-- gRPC-based peer communication replaces manual REST P2P
+### Trigger condition
+Do not start V2 until named stakeholders from at least two independent organisations have agreed to each operate a peer node. Fabric without genuine decentralisation of participants is expensive complexity for no trust gain.
 
-### Key Differences from V0/V1 Custom Chain
+### What Fabric adds over V1
+- Multiple independent orderer nodes (RAFT consensus — no single miner)
+- Endorsement policies: M-of-N organisations must sign a transaction before it commits
+- Per-organisation MSP: cryptographic identity, not just a JWT
+- No single sync authority — each org's peer is independently authoritative
 
-| Concept | V0/V1 (Custom) | V2 (Hyperledger Fabric) |
-|---|---|---|
-| Consensus | PoA (RegAuth mines) | RAFT ordering service |
-| Smart contract | None (logic in routes) | Chaincode (Go or TypeScript) |
-| Identity | `projId` string | X.509 certificates via MSP |
-| Block format | Custom JSON schema | Protobuf (Fabric spec) |
-| P2P transport | REST (Axios) | gRPC |
-| SDK | None | `fabric-network` npm package |
+### Prerequisites
+- V1 complete and in use by at least one real organisation
+- Fabric fundamentals learned: MSP, channels, chaincode lifecycle, endorsement (allow ~3 weeks)
+- Docker/Kubernetes infrastructure available across participating orgs
 
-### Prerequisites Before V2
-- V1 complete and stable
-- Team trained on Fabric concepts (ordering service, peers, channels, MSP)
-- Docker Swarm or Kubernetes for multi-org deployment
+### Effort Estimate (solo developer, demo scope)
+- Environment + `test-network` fluency: ~1 week
+- Concept learning (MSP, channels, endorsement): ~2–3 weeks
+- Custom network definition (2 orgs, 1 orderer): ~3–4 weeks
+- Chaincode (submit + query + history): ~1 week
+- Node.js Gateway API: ~1–2 weeks
+- **Total to working demo: ~8–12 weeks**
 
-### Migration Strategy
-1. Map each V1 project node → one Fabric peer per org
-2. Map RegAuth → Fabric ordering service + endorser policy
-3. Port transaction + block logic to chaincode
-4. Replace REST API layer with Fabric Gateway SDK calls
-5. Keep React frontend — swap API client only
+### Migration path from V1
+V1 signed records can be bulk-loaded into a Fabric ledger as historical data — the data model is compatible. The migration is an import script, not a rewrite.
 
 ---
 
 ## Timeline (Indicative)
 
 ```
-2026 Q2  Version 0 complete (bug fixes + Jest)
-2026 Q3  Version 1 kickoff — RegAuth rewrite
-2026 Q4  Version 1 — Project node template + frontend MVP
-2027 Q1  Version 1 — Additional project nodes + hardening
-2027 Q2  Version 2 exploration / prototype
+2026 Q2–Q3  V0 complete: remaining tests + minimal frontend
+2026 Q3–Q4  V1 build: signed log, NestJS, PostgreSQL, frontend
+2027 Q1     V1 in use; evaluate consortium interest for V2
+2027 Q2+    V2 exploration — only if consortium confirmed
 ```

@@ -42,7 +42,7 @@ See [../VERSION_0_TODO.md](../VERSION_0_TODO.md) for the full tracked checklist.
 - [ ] QW-1: UUID v7
 - [ ] QW-2: Remove sha256 package
 - [x] QW-3: Consolidate duplicate constants → `config.js`
-- [ ] PF-1: Persist `pendingBroadcasts` across restarts (currently in-memory)
+- [~] PF-1: Persist `pendingBroadcasts` across restarts — **deferred to V1** (BullMQ / PostgreSQL job queue)
 - [ ] Jest setup + Scenario A (unit), B (integration), C (chain integrity)
 
 ---

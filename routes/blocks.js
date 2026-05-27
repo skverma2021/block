@@ -111,11 +111,9 @@ async function mineBlockInternal() {
         console.log(`Node ${network.myNodeUrl}: Confirmed transactions removed from mempool.`);
 
         // Broadcast the new block to all registered peer nodes.
-        // TODO BUG-1: URL is missing '/api' prefix — these posts receive 404.
-        //   Correct form: `${networkNodeUrl}/api/blocks/receive`
         const broadcastPromises = network.networkNodes.map(networkNodeUrl => {
             console.log(`Node ${network.myNodeUrl}: Broadcasting block ${newBlock.blockIndex} to ${networkNodeUrl}/api/blocks/receive`);
-            return axios.post(`${networkNodeUrl}/blocks/receive`, { newBlock });
+            return axios.post(`${networkNodeUrl}/api/blocks/receive`, { newBlock });
         });
         await Promise.all(broadcastPromises);
 

@@ -19,7 +19,7 @@ const sqlite3 = require('sqlite3').verbose();
 const path    = require('path');
 const fs      = require('fs');
 const crypto  = require('crypto');
-const { v4: uuidv4 } = require('uuid');
+const { v7: uuidv7 } = require('uuid');
 
 // =============================================================================
 // SECTION 1: MODULE SETUP
@@ -178,14 +178,17 @@ function initDb() {
                         resolve(db);
                     } else if (String(theProj) === '0') {
                         console.log('DB Module: Creating Genesis Block for Regulator node...');
+                        const genesisTimestamp  = new Date().toISOString();
+                        const genesisMerkleRoot = calculateMerkleRoot([]); // standard formula for empty block
+                        const genesisHashInput  = 0 + genesisTimestamp + genesisMerkleRoot + '0' + 0 + JSON.stringify([]);
                         const genesisBlock = {
                             blockIndex: 0,
-                            timestamp: new Date().toISOString(),
+                            timestamp: genesisTimestamp,
                             transactions: '[]',
                             nonce: 0,
-                            hash: crypto.createHash('sha256').update('regulator_genesis_block_v1').digest('hex'),
+                            hash: crypto.createHash('sha256').update(genesisHashInput).digest('hex'),
                             previousBlockHash: '0',
-                            merkleRoot: crypto.createHash('sha256').update('genesis_merkle_root_v1').digest('hex')
+                            merkleRoot: genesisMerkleRoot
                         };
 
                         const insertGenesis = `
@@ -269,7 +272,7 @@ async function createTransaction(transactionData) {
         throw new Error("DB Module: Project ID not set for this node or provided in transaction data.");
     }
 
-    const finalTransactionId = transactionData.transactionId || uuidv4().split('-').join('');
+    const finalTransactionId = transactionData.transactionId || uuidv7().split('-').join('');
     const finalTimestamp = transactionData.timestamp || new Date().toISOString();
     const finalProjId = transactionData.projId !== undefined ? String(transactionData.projId) : String(theProj);
 

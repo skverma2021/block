@@ -99,8 +99,7 @@ router.post('/submit', async function (req, res) {
 
         const broadcastPromises = network.networkNodes.map(async (networkNodeUrl) => {
             try {
-                // TODO BUG-1: URL is missing '/api' prefix. Correct: /api/transactions/receive
-                await axios.post(`${networkNodeUrl}/transactions/receive`, newTransaction, { timeout: config.BROADCAST_TIMEOUT_MS });
+                await axios.post(`${networkNodeUrl}/api/transactions/receive`, newTransaction, { timeout: config.BROADCAST_TIMEOUT_MS });
                 broadcastSuccessCount++;
             } catch (error) {
                 console.warn(`Node ${network.myNodeUrl}: Broadcast to ${networkNodeUrl} failed: ${error.message}`);

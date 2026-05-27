@@ -90,7 +90,7 @@ details          TEXT
 |---|---|
 | `rowHash` | `SHA-256(transactionId + timestamp + rawDataJson)` |
 | `blockHash` | `SHA-256(blockIndex + timestamp + merkleRoot + previousBlockHash + nonce + JSON([{id,hash}…]))` |
-| Genesis hash | `SHA-256('regulator_genesis_block_v1')` |
+| Genesis hash | Same formula as regular blocks — `SHA-256(0 + timestamp + merkleRoot + '0' + 0 + '[]')`, where `merkleRoot = SHA-256('empty_merkle_root_placeholder')` |
 | Chain hash | Rolling `SHA-256` over all block hashes in sequence |
 
 All hashing uses Node's built-in `crypto` module (`createHash('sha256')`).

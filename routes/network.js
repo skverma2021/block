@@ -31,8 +31,7 @@ let networkNodes = [];
 let isRegAuthOnline   = true;
 let lastRegAuthCheck  = null;
 
-// TODO BUG-4: REG_AUTH_URL should be a CLI argument, not hardcoded.
-const REG_AUTH_URL = 'http://localhost:3000';
+let regAuthUrl = 'http://localhost:3000'; // Updated via setRegAuthUrl() on startup.
 
 // In-memory retry queue for failed transaction broadcasts.
 // TODO PF-1: Persist this to SQLite so retries survive a process restart.
@@ -46,6 +45,12 @@ let pendingBroadcasts = [];  // [{ transaction, targetUrls, attempts, lastAttemp
 function setMyNodeUrl(url) {
     myNodeUrl = url;
     console.log(`Network Module: My Node URL set to ${myNodeUrl}`);
+}
+
+/** Sets the RegAuth base URL. Called once from index.js on startup. */
+function setRegAuthUrl(url) {
+    regAuthUrl = url;
+    console.log(`Network Module: RegAuth URL set to ${regAuthUrl}`);
 }
 
 // =============================================================================
@@ -67,7 +72,7 @@ router.get('/regauth-status', (req, res) => {
         isRegAuthOnline:      isRegAuthOnline,
         lastCheck:            lastRegAuthCheck,
         pendingBroadcastCount: pendingBroadcasts.length,
-        regAuthUrl:           REG_AUTH_URL
+        regAuthUrl:           regAuthUrl
     });
 });
 
@@ -82,7 +87,7 @@ router.get('/regauth-status', (req, res) => {
  */
 async function checkRegAuthHealth() {
     try {
-        const response = await axios.get(`${REG_AUTH_URL}/api/network/health`, { timeout: 5000 });
+        const response = await axios.get(`${regAuthUrl}/api/network/health`, { timeout: 5000 });
         if (response.status === 200) {
             const wasOffline = !isRegAuthOnline;
             isRegAuthOnline = true;
@@ -140,8 +145,7 @@ async function flushPendingBroadcasts() {
         
         try {
             const broadcastPromises = pending.targetUrls.map(url =>
-                // TODO BUG-2: URL is missing '/api' prefix. Correct: /api/transactions/receive
-                axios.post(`${url}/transactions/receive`, pending.transaction, { timeout: config.BROADCAST_TIMEOUT_MS })
+                axios.post(`${url}/api/transactions/receive`, pending.transaction, { timeout: config.BROADCAST_TIMEOUT_MS })
                     .catch(err => {
                         console.warn(`Network Module: Retry broadcast to ${url} failed: ${err.message}`);
                         return null;
@@ -188,9 +192,8 @@ router.post('/register-and-broadcast-node', async (req, res) => {
 
     const regPromises = networkNodes.map(existingNodeUrl => {
         if (existingNodeUrl !== newNodeUrl) {
-            // TODO BUG-1: missing '/api' prefix. Correct: /api/network/register-node
             console.log(`Node ${myNodeUrl}: Notifying ${existingNodeUrl} about new node ${newNodeUrl}`);
-            return axios.post(`${existingNodeUrl}/network/register-node`, { newNodeUrl })
+            return axios.post(`${existingNodeUrl}/api/network/register-node`, { newNodeUrl })
                 .catch(err => console.error(`Node ${myNodeUrl}: Error notifying ${existingNodeUrl}: ${err.message}`));
         }
         return Promise.resolve();
@@ -201,8 +204,7 @@ router.post('/register-and-broadcast-node', async (req, res) => {
 
         // Send the new node the full list of known peers (including self).
         const allNetworkNodes = [...networkNodes, myNodeUrl];
-        // TODO BUG-1: missing '/api' prefix. Correct: /api/network/register-nodes-bulk
-        await axios.post(`${newNodeUrl}/network/register-nodes-bulk`, { allNetworkNodes });
+        await axios.post(`${newNodeUrl}/api/network/register-nodes-bulk`, { allNetworkNodes });
 
         res.json({ note: 'New node registered with network and broadcasted.', networkNodes: networkNodes });
     } catch (err) {
@@ -254,9 +256,10 @@ router.post('/register-nodes-bulk', (req, res) => {
 
 module.exports = {
     router,
-    myNodeUrl, // Exported for other modules to use (e.g., for logging)
+    get myNodeUrl() { return myNodeUrl; }, // Getter — always returns the current value
     networkNodes, // Exported for other modules to use (e.g., for broadcasting)
-    setMyNodeUrl, // Export setter for index.js
+    setMyNodeUrl,  // Export setter for index.js
+    setRegAuthUrl, // Export setter for index.js
     // RegAuth availability exports
     isRegAuthOnline,
     checkRegAuthHealth,

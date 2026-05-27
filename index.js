@@ -30,19 +30,17 @@ const app = express();
 //   dbFileName - SQLite file name stored under data/, e.g. projA.db
 // =============================================================================
 
-const PORT        = process.argv[2] || 3000;
-const MY_NODE_URL = process.argv[3];
-const REG_AUTH_ID = process.argv[4];
+const PORT         = process.argv[2] || 3000;
+const MY_NODE_URL  = process.argv[3];
+const REG_AUTH_ID  = process.argv[4];
 const DB_FILE_NAME = process.argv[5] || 'default.db';
+const REG_AUTH_URL = process.argv[6] || 'http://localhost:3000';
 
 // Propagate startup config into the db and network modules.
 db.setProjId(REG_AUTH_ID);
 db.setDbFile(DB_FILE_NAME);
 network.setMyNodeUrl(MY_NODE_URL);
-
-// TODO BUG-4: REG_AUTH_URL should be a 5th CLI argument to support
-// cross-machine demos. Hardcoded to localhost:3000 for now.
-const REG_AUTH_URL = 'http://localhost:3000';
+network.setRegAuthUrl(REG_AUTH_URL);
 
 // Interval handles — kept so they can be cleared on graceful shutdown.
 let mineInterval;
@@ -200,12 +198,10 @@ async function startServer() {
         // Handles both: 1) Fresh nodes with no blocks, 2) Nodes that were down and need to catch up
         
         if (String(REG_AUTH_ID) !== '0') {
-            const regAuthUrl = 'http://localhost:3000'; // Assuming RegAuth is always on 3000 for PoC
-            
             try {
                 // Step 1: Compare local chain height with RegAuth
                 const localLastIndex = await db.getLastBlockIndex();
-                const regAuthResponse = await axios.get(`${regAuthUrl}/api/blocks/last-index`);
+                const regAuthResponse = await axios.get(`${REG_AUTH_URL}/api/blocks/last-index`);
                 const regAuthLastIndex = regAuthResponse.data.lastBlockIndex;
                 
                 console.log(`Node ${MY_NODE_URL}: Local chain index: ${localLastIndex}, RegAuth chain index: ${regAuthLastIndex}`);
@@ -215,7 +211,7 @@ async function startServer() {
                     if (localLastIndex === -1) {
                         // Full sync - no local blocks
                         console.log(`Node ${MY_NODE_URL}: No local blockchain found. Performing full sync from RegAuth...`);
-                        const fullChainResponse = await axios.get(`${regAuthUrl}/api/blocks/chain`);
+                        const fullChainResponse = await axios.get(`${REG_AUTH_URL}/api/blocks/chain`);
                         const fullChain = fullChainResponse.data.chain;
                         
                         if (fullChain && fullChain.length > 0) {
@@ -231,7 +227,7 @@ async function startServer() {
                         console.log(`Node ${MY_NODE_URL}: Node behind by ${regAuthLastIndex - localLastIndex} blocks. Performing partial sync...`);
                         
                         // Step 2: Fetch missing blocks from RegAuth
-                        const missingBlocksResponse = await axios.get(`${regAuthUrl}/api/blocks/chain-from/${localLastIndex}`);
+                        const missingBlocksResponse = await axios.get(`${REG_AUTH_URL}/api/blocks/chain-from/${localLastIndex}`);
                         const missingBlocks = missingBlocksResponse.data.blocks;
                         
                         if (missingBlocks && missingBlocks.length > 0) {
