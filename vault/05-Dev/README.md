@@ -4,10 +4,14 @@
 
 | ID | Severity | Status | Location | Description |
 |---|---|---|---|---|
-| BUG-1 | **Critical** | Open | `routes/blocks.js`, `routes/transactions.js`, `routes/network.js` | All inter-node `axios.post` calls are missing the `/api` prefix — peer nodes never receive blocks or transactions. Fix: prepend `/api` to every inter-node POST URL. |
-| BUG-2 | High | Open | `routes/network.js` — `flushPendingBroadcasts()` | Retry flush also uses the wrong URL path (`/transactions/receive` not `/api/transactions/receive`). |
-| BUG-3 | Low | Open | `routes/network.js` — `module.exports` | `myNodeUrl` is exported as a primitive value snapshot (always `''`). Fix: export as a getter `get myNodeUrl() { return myNodeUrl; }`. |
-| BUG-4 | Medium | Open | `index.js`, `routes/network.js` | `REG_AUTH_URL` is hardcoded to `'http://localhost:3000'`. Fix: make it a 5th CLI argument so the system can run across machines. |
+| BUG-1 | **Critical** | **Fixed** | `routes/blocks.js`, `routes/transactions.js`, `routes/network.js` | All inter-node `axios.post` calls were missing the `/api` prefix. Fixed by prepending `/api` to every inter-node POST URL. |
+| BUG-2 | High | **Fixed** | `routes/network.js` — `flushPendingBroadcasts()` | Retry flush also used wrong URL path. Fixed alongside BUG-1. |
+| BUG-3 | Low | **Fixed** | `routes/network.js` — `module.exports` | `myNodeUrl` exported as a primitive value snapshot. Fixed: exported as getter. |
+| BUG-4 | Medium | **Fixed** | `index.js`, `routes/network.js` | `REG_AUTH_URL` was hardcoded. Fixed: now a 5th CLI argument. |
+| BUG-5 | Medium | **Fixed** | `db.js` — `initDb()` | Genesis block hash used wrong formula. Fixed: uses standard `blockHash` formula with `merkleRoot([])`. |
+| BUG-6 | Low | **Fixed** | `routes/blocks.js` — `verifyChainIntegrity` | Genesis block verification used old hardcoded hash. Fixed: recalculates using standard formula. |
+| BUG-7 | **Critical** | **Fixed** | `index.js` — `performIntegrityCheck` | RegAuth self-purge: on any integrity failure RegAuth called `forceResyncFromRegAuth()` against itself, wiping its own chain with no recovery path. Fixed: guard returns early if `REG_AUTH_ID === '0'`. |
+| BUG-8 | **Critical** | **Fixed** | `db.js` — `addBlockToBlockchain`, `getAllBlocks`, `getBlocksFromIndex` | Transaction ordering: `Promise.all` inserts raced outside `db.serialize()` scope, assigning `internal_id` values in completion order, not submission order. `getAllBlocks` and `getBlocksFromIndex` then read `ORDER BY internal_id ASC` — different order than mining used — breaking every Merkle root and block hash on retrieval. Fixed: sequential `for` loop inserts in `addBlockToBlockchain`; both read functions now reorder by the canonical `bchain.transactions` lightweight list. |
 
 ### BUG-1 Detail — Affected locations
 
@@ -27,8 +31,8 @@ All five should have `/api` inserted after the host: `${networkNodeUrl}/api/bloc
 
 | ID | Status | Description |
 |---|---|---|
-| QW-1 | Open | Switch `uuidv4()` → `uuidv7()` in `db.js`. UUID v7 is time-ordered; better for DB indexing. Package already installed. |
-| QW-2 | Open | Remove `sha256` npm package (`npm uninstall sha256`). Unused — all hashing uses Node's built-in `crypto`. |
+| QW-1 | **Done** | Switch `uuidv4()` → `uuidv7()` in `db.js`. UUID v7 is time-ordered; better for DB indexing. |
+| QW-2 | **Done** | Remove `sha256` npm package (`npm uninstall sha256`). Unused — all hashing uses Node's built-in `crypto`. |
 | QW-3 | **Done** | Duplicate `MINE_THRESHOLD = 5` (index.js) and `BLOCK_SIZE = 5` (blocks.js) consolidated into `config.TRANSACTIONS_PER_BLOCK`. |
 
 ---
@@ -38,8 +42,8 @@ All five should have `/api` inserted after the host: `${networkNodeUrl}/api/bloc
 See [../VERSION_0_TODO.md](../VERSION_0_TODO.md) for the full tracked checklist.
 
 ### Summary
-- [ ] Fix BUG-1 through BUG-4
-- [ ] QW-1: UUID v7
+- [x] Fix BUG-1 through BUG-8
+- [x] QW-1: UUID v7
 - [ ] QW-2: Remove sha256 package
 - [x] QW-3: Consolidate duplicate constants → `config.js`
 - [~] PF-1: Persist `pendingBroadcasts` across restarts — **deferred to V1** (BullMQ / PostgreSQL job queue)

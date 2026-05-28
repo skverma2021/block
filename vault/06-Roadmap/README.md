@@ -20,16 +20,18 @@ The key insight driving this strategy: V0 is a tamper-evident audit log with rep
 
 ### Scope
 - [x] Core blockchain: mempool, mining, chain sync, integrity checks
-- [x] BUG-1 through BUG-5 fixed
+- [x] BUG-1 through BUG-8 fixed (including RegAuth self-purge — BUG-7; tx ordering — BUG-8)
 - [x] Refactored: `config.js`, section headers, JSDoc, `.gitignore`
-- [ ] Quick wins: UUID v7, remove unused `sha256` package
+- [x] Quick wins: UUID v7, remove unused `sha256` package
+- [x] Minimal frontend: chain explorer + transaction submission UI + block detail view
 - [ ] Jest: unit tests, integration tests, chain integrity tests
-- [ ] Minimal frontend (chain explorer + transaction submission UI)
 
 ### Completion criteria
-- All nodes start, register, and exchange blocks correctly
-- `npm test` passes all Jest scenarios
-- Frontend makes the limitation visible: "Who controls RegAuth controls the chain"
+- [x] All nodes start, register, and exchange blocks correctly
+- [x] Frontend makes the limitation visible: "Who controls RegAuth controls the chain"
+- [ ] `npm test` passes all Jest scenarios
+
+> **Status (2026-05-28):** Functionally complete. Jest test suite is the sole remaining item before V0 is fully signed off.
 
 ### Known Limitations (by design — the demo's point)
 - Single miner: RegAuth is the sole block producer; a compromised RegAuth rewrites history
@@ -42,6 +44,8 @@ The key insight driving this strategy: V0 is a tamper-evident audit log with rep
 ## Version 1 — Signed Append-Only Log (production candidate)
 
 **Goal**: Replace the blockchain structure with a simpler architecture that delivers *more* practical trust at a fraction of the operational cost.
+
+**Domain scope**: V1 is intentionally domain-agnostic. The signed log pattern applies to any auditable record (environmental readings, pharmaceutical batch records, financial transactions, supply chain events, etc.). The air quality use case becomes one possible dataset, not a hard constraint on the schema.
 
 ### Why this beats V0's blockchain for this use case
 - Each record is signed by the *submitting party's private key* — RegAuth cannot forge a past entry even if it controls the database

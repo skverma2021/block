@@ -109,43 +109,32 @@
 
 ## INTEGRATION VALIDATION
 
-- [ ] **INT-1** Postman collection — one request per API route  
-  Cover: `/api/transactions/submit`, `/api/transactions/receive`, `/api/transactions/`  
-  `/api/blocks/mine`, `/api/blocks/receive`, `/api/blocks/chain`, `/api/blocks/chain-from/:startIndex`  
-  `/api/blocks/last-index`, `/api/blocks/chain-hash`, `/api/blocks/verify-integrity`  
-  `/api/blocks/security-alerts`  
-  `/api/network/health`, `/api/network/regauth-status`, `/api/network/register-and-broadcast-node`  
-  `/api/network/register-node`, `/api/network/register-nodes-bulk`
+- [x] **INT-1** Postman collection — one request per API route  
+  Created: `postman/Pollution-Monitoring-Blockchain.postman_collection.json`  
+  Covers all 16 routes across 4 folders: 00 Network Setup, 01 Transactions, 02 Blocks, 03 Network Status.
 
-- [ ] **INT-2** Postman environment files for single-machine (localhost) and two-machine (LAN IP) setups
+- [x] **INT-2** Postman environment files for single-machine (localhost) and two-machine (LAN IP) setups  
+  Created: `postman/env-localhost.postman_environment.json` — all 3 nodes on localhost  
+  Created: `postman/env-lan.postman_environment.json` — RegAuth on Machine 1, projA/B on Machine 2
 
 ---
 
 ## VAULT (Foundation for Version 1)
 
-- [ ] **VAULT-1** TypeScript interface definitions (draft in plain `.ts` files, no compilation needed)  
+- [x] **VAULT-1** TypeScript interface definitions (draft in plain `.ts` files, no compilation needed)  
   `IBlock`, `ITransaction`, `INetworkNode`, `IPendingBroadcast`, `IAuditLogEntry`  
-  These become Prisma schema entities and NestJS DTOs in Version 1.
+  Created: `vault/01-Architecture/types.ts`
 
-- [ ] **VAULT-2** Behavior specifications — one document per scenario (A, B, C)  
+- [x] **VAULT-2** Behavior specifications — one document per scenario (A, B, C)  
   Each spec states: preconditions, trigger, expected system response, observable evidence.  
-  The Jest tests in this file ARE the machine-readable version of these specs.
+  Created: `vault/05-Dev/behavior-specs.md`
 
-- [ ] **VAULT-3** Known limitations list  
-  - HTTP polling (10s lag)  
-  - No TLS / all traffic in plaintext  
-  - No API authentication between nodes  
-  - Single miner (RegAuth) — bottleneck and single point of failure for block production  
-  - No input range validation for sensor readings (SO2, NO2, PM10, PM2_5)  
-  - Static network topology (manual node registration)  
-  - Genesis block hash is deterministic (hardcoded input string)
+- [x] **VAULT-3** Known limitations list  
+  Created: `vault/00-Project/limitations.md` (12 items: LIM-01 to LIM-12)
 
-- [ ] **VAULT-4** Architecture decisions log  
-  - Why PoA (not PoW/PoS)  
-  - Why per-node SQLite (not shared DB)  
-  - Why RegAuth is sole miner  
-  - Why SHA-256 rowHash = transactionId + timestamp + rawDataJson  
-  - Why lightweight tx references in `bchain.transactions` + full data in `confirmed_transactions`
+- [x] **VAULT-4** Architecture decisions log  
+  Updated: `vault/00-Project/README.md` — glossary genesis block hash corrected (BUG-5 fix reflected);
+  `vault/05-Dev/README.md` — all bugs marked Fixed, QW-1/QW-2 marked Done.
 
 ---
 

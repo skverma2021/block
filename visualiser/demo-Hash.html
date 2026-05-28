@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHA-256 Hashing</title>
+    <link rel="stylesheet" href="style.css">
+    <style> main { padding: 24px 20px; max-width: 700px; margin: 0 auto; } </style>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <div><h1>SHA-256 Hashing</h1><p class="subtitle">Interactive visualiser — lesson 1 of 6</p></div>
+    <a href="demo-blockchain_visualizer_demo.html" class="btn btn-ghost btn-sm">← All Lessons</a>
+  </div>
+</header>
+<main>
+  <div class="concept"><strong>SHA-256</strong> converts any input into a fixed 64-character hex string. Same input → same hash, always. No way to reverse it.</div>
+  <div class="card">
+    <div class="card-title">Live SHA-256 Hash</div>
+    <div class="form-group"><label>Input</label><textarea id="inputArea" placeholder="Type here…" rows="5"></textarea></div>
+    <div><label>SHA-256 Hash</label><code class="hash" id="hashOutput">—</code></div>
+  </div>
+  <div class="insight"><strong>In our system:</strong> every sensor reading gets a <code>rowHash = SHA-256(id + timestamp + data)</code> on arrival. Tamper with the reading and the hash no longer matches.</div>
+</main>
+
+<script>
+    const inputArea = document.getElementById('inputArea');
+    const hashOutput = document.getElementById('hashOutput');
+
+    async function computeHash(text) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+    }
+
+    inputArea.addEventListener('input', async () => {
+        const hash = await computeHash(inputArea.value);
+        hashOutput.textContent = hash || '—';
+    });
+    computeHash('').then(h => hashOutput.textContent = h);
+</script>
+
+</body>
+</html>

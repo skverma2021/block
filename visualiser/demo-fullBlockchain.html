@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blockchain Mining Chain Demo</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        main { padding: 24px 20px; max-width: 1000px; margin: 0 auto; }
+        .mining { background-color: #fef9c3; }
+        input[type=number] { width: 60px; }
+    </style>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <div><h1>Blockchain Mining Chain</h1><p class="subtitle">Interactive visualiser — full PoW chain</p></div>
+    <a href="demo-blockchain_visualizer_demo.html" class="btn btn-ghost btn-sm">← All Lessons</a>
+  </div>
+</header>
+<main>
+<div class="concept">Each block is mined (PoW) and links to the previous. Edit a block's data — it re-mines and all downstream blocks cascade. <strong>Our system uses nonce=0 (PoA) — this demo illustrates the concept only.</strong></div>
+<div class="card">
+<table>
+    <thead>
+        <tr>
+            <th>Prev Hash</th>
+            <th>Block Data</th>
+            <th>Zeros (max 4)</th>
+            <th>Nonce</th>
+            <th>Hash</th>
+        </tr>
+    </thead>
+    <tbody id="blockchain">
+        <tr>
+            <td class="prevHash">GENESIS</td>
+            <td><textarea oninput="mineChain()"></textarea></td>
+            <td><input type="number" value="2" min="1" max="4" onchange="mineChain()"></td>
+            <td class="nonce">---</td>
+            <td class="hash">---</td>
+        </tr>
+        <tr>
+            <td class="prevHash">---</td>
+            <td><textarea oninput="mineChain()"></textarea></td>
+            <td><input type="number" value="2" min="1" max="4" onchange="mineChain()"></td>
+            <td class="nonce">---</td>
+            <td class="hash">---</td>
+        </tr>
+        <tr>
+            <td class="prevHash">---</td>
+            <td><textarea oninput="mineChain()"></textarea></td>
+            <td><input type="number" value="2" min="1" max="4" onchange="mineChain()"></td>
+            <td class="nonce">---</td>
+            <td class="hash">---</td>
+        </tr>
+    </tbody>
+</table>
+</div>
+
+<script>
+    async function computeSHA256(text) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+    }
+
+    async function mineBlock(prevHash, dataValue, difficulty, nonceCell, hashCell, row) {
+        const targetPrefix = '0'.repeat(difficulty);
+        let nonce = 0;
+        let hash = '';
+        row.classList.add('mining');
+
+        while (true) {
+            const combinedData = prevHash + dataValue + nonce;
+            hash = await computeSHA256(combinedData);
+            if (hash.startsWith(targetPrefix)) break;
+            nonce++;
+            if (nonce % 500 === 0) await new Promise(r => setTimeout(r, 0));
+        }
+
+        nonceCell.textContent = nonce;
+        hashCell.textContent = hash;
+        row.classList.remove('mining');
+        return hash;
+    }
+
+    async function mineChain() {
+        const rows = document.querySelectorAll('#blockchain tr');
+        let prevHash = 'GENESIS';
+
+        for (let row of rows) {
+            const dataValue = row.querySelector('textarea').value;
+            const difficulty = parseInt(row.querySelector('input[type="number"]').value);
+            const nonceCell = row.querySelector('.nonce');
+            const hashCell = row.querySelector('.hash');
+            const prevHashCell = row.querySelector('.prevHash');
+
+            prevHashCell.textContent = prevHash;
+            const currentHash = await mineBlock(prevHash, dataValue, difficulty, nonceCell, hashCell, row);
+            prevHash = currentHash;
+        }
+    }
+
+    window.onload = mineChain;
+</script>
+
+</body>
+</html>

@@ -25,7 +25,7 @@ The primary goal is auditability: if a reading is altered after submission, the 
 | **Project Node** | A participating monitoring station (`projId = '1'`, `'2'`, …). |
 | **Mempool** | The `mempool_transactions` table — transactions waiting to be mined into a block. |
 | **Block** | A group of `TRANSACTIONS_PER_BLOCK` (default: 5) confirmed transactions. |
-| **Genesis Block** | Block at index 0. Created only by RegAuth. Hash = `SHA-256('regulator_genesis_block_v1')`. |
+| **Genesis Block** | Block at index 0. Created only by RegAuth. `blockHash = SHA-256(blockIndex + timestamp + merkleRoot([] empty) + 'GENESIS' + nonce + '[]')` where nonce=0. |
 | **PoA** | Proof of Authority — no computational puzzle; RegAuth mines by authority alone. Nonce is always 0. |
 | **rowHash** | Per-transaction tamper check: `SHA-256(transactionId + timestamp + rawDataJson)`. |
 | **blockHash** | `SHA-256(blockIndex + timestamp + merkleRoot + previousBlockHash + nonce + JSON([{id, hash}…]))` |

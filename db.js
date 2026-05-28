@@ -513,39 +513,45 @@ function addBlockToBlockchain(block) {
                 }
                 const block_id = this.lastID;
 
-                const insertTxPromises = transactions.map(tx => {
-                    return new Promise((res, rej) => {
-                        const { transactionId, projId, timestamp, submitterId, stationID, SO2, NO2, PM10, PM2_5, rawDataJson, rowHash } = tx;
-                        const sql = `INSERT INTO confirmed_transactions
-                                     (transaction_id, block_id, projId, timestamp, submitter_id, station_id, so2, no2, pm10, pm2_5, raw_data_json, rowHash)
-                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-                        db.run(sql, [
-                            transactionId, block_id, projId, timestamp, submitterId, stationID, SO2, NO2, PM10, PM2_5, rawDataJson, rowHash
-                        ], function(txErr) {
-                            if (txErr) rej(txErr);
-                            else res();
+                // Insert confirmed transactions SEQUENTIALLY to guarantee internal_id order
+                // matches the mining order (same order used to calculate merkleRoot + blockHash).
+                // Promise.all would race outside the db.serialize() scope causing internal_id
+                // mismatches that break integrity verification.
+                (async () => {
+                    try {
+                        for (const tx of transactions) {
+                            const { transactionId, projId, timestamp, submitterId, stationID, SO2, NO2, PM10, PM2_5, rawDataJson, rowHash } = tx;
+                            const sql = `INSERT INTO confirmed_transactions
+                                         (transaction_id, block_id, projId, timestamp, submitter_id, station_id, so2, no2, pm10, pm2_5, raw_data_json, rowHash)
+                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                            await new Promise((res, rej) => {
+                                db.run(sql, [
+                                    transactionId, block_id, projId, timestamp, submitterId, stationID, SO2, NO2, PM10, PM2_5, rawDataJson, rowHash
+                                ], function(txErr) {
+                                    if (txErr) rej(txErr);
+                                    else res();
+                                });
+                            });
+                        }
+                        await new Promise((res, rej) => {
+                            db.run('COMMIT;', (commitErr) => {
+                                if (commitErr) {
+                                    console.error('DB Module: Error committing block transaction:', commitErr.message);
+                                    db.run('ROLLBACK;', () => console.error('DB Module: Transaction rolled back due to commit error.'));
+                                    rej(commitErr);
+                                } else {
+                                    console.log(`DB Module: Block (index ${blockIndex}) added to blockchain with ${transactions.length} transactions and committed.`);
+                                    res();
+                                }
+                            });
                         });
-                    });
-                });
-
-                Promise.all(insertTxPromises)
-                    .then(() => {
-                        db.run("COMMIT;", (commitErr) => {
-                            if (commitErr) {
-                                console.error('DB Module: Error committing block transaction:', commitErr.message);
-                                db.run("ROLLBACK;", () => console.error('DB Module: Transaction rolled back due to commit error.'));
-                                reject(commitErr);
-                            } else {
-                                console.log(`DB Module: Block (index ${blockIndex}) added to blockchain with ${transactions.length} transactions and committed.`);
-                                resolve(block);
-                            }
-                        });
-                    })
-                    .catch(insertErr => {
+                        resolve(block);
+                    } catch (insertErr) {
                         console.error('DB Module: Error inserting confirmed transactions:', insertErr.message);
-                        db.run("ROLLBACK;", () => console.error('DB Module: Transaction rolled back due to confirmed transactions insertion error.'));
+                        db.run('ROLLBACK;', () => console.error('DB Module: Transaction rolled back due to confirmed transactions insertion error.'));
                         reject(insertErr);
-                    });
+                    }
+                })();
             });
         });
     });
@@ -597,15 +603,28 @@ function getAllBlocks() {
                 const chainPromises = rows.map(async (row) => {
                     const blockId = row.id; // Internal ID from bchain table
 
+                    // Use bchain.transactions (lightweight list) as the canonical ordering.
+                    // Do NOT sort by internal_id or timestamp: concurrent inserts in
+                    // addBlockToBlockchain can assign internal_ids out of order, and
+                    // timestamps can collide. The lightweight list records the exact order
+                    // that was used to compute the merkleRoot and blockHash during mining.
+                    const lightweightOrder = JSON.parse(row.transactions); // [{transactionId, rowHash}]
+
                     const transactionsSql = `SELECT transaction_id, projId, timestamp, submitter_id, station_id, so2, no2, pm10, pm2_5, raw_data_json, rowHash
-                                             FROM confirmed_transactions WHERE block_id = ? ORDER BY internal_id ASC`;
+                                             FROM confirmed_transactions WHERE block_id = ?`;
                     const confirmedTxs = await new Promise((txResolve, txReject) => {
                         db.all(transactionsSql, [blockId], (txErr, txRows) => {
                             if (txErr) {
                                 console.error(`DB Module: Error getting confirmed transactions for block ${blockId}:`, txErr.message);
                                 txReject(txErr);
-                            } else {
-                                const parsedTxs = txRows.map(txRow => ({
+                                return;
+                            }
+                            // Reorder by bchain.transactions list to match mining order exactly
+                            const byId = new Map(txRows.map(r => [r.transaction_id, r]));
+                            const ordered = lightweightOrder
+                                .map(lt => byId.get(lt.transactionId))
+                                .filter(Boolean)
+                                .map(txRow => ({
                                     transactionId: txRow.transaction_id,
                                     projId: txRow.projId,
                                     timestamp: txRow.timestamp,
@@ -618,8 +637,7 @@ function getAllBlocks() {
                                     rawDataJson: txRow.raw_data_json,
                                     rowHash: txRow.rowHash
                                 }));
-                                txResolve(parsedTxs);
-                            }
+                            txResolve(ordered);
                         });
                     });
 
@@ -681,15 +699,22 @@ function getBlocksFromIndex(startIndex) {
                 const chainPromises = rows.map(async (row) => {
                     const blockId = row.id;
 
+                    const lightweightOrder = JSON.parse(row.transactions);
+
                     const transactionsSql = `SELECT transaction_id, projId, timestamp, submitter_id, station_id, so2, no2, pm10, pm2_5, raw_data_json, rowHash
-                                             FROM confirmed_transactions WHERE block_id = ? ORDER BY internal_id ASC`;
+                                             FROM confirmed_transactions WHERE block_id = ?`;
                     const confirmedTxs = await new Promise((txResolve, txReject) => {
                         db.all(transactionsSql, [blockId], (txErr, txRows) => {
                             if (txErr) {
                                 console.error(`DB Module: Error getting confirmed transactions for block ${blockId}:`, txErr.message);
                                 txReject(txErr);
-                            } else {
-                                const parsedTxs = txRows.map(txRow => ({
+                                return;
+                            }
+                            const byId = new Map(txRows.map(r => [r.transaction_id, r]));
+                            const ordered = lightweightOrder
+                                .map(lt => byId.get(lt.transactionId))
+                                .filter(Boolean)
+                                .map(txRow => ({
                                     transactionId: txRow.transaction_id,
                                     projId: txRow.projId,
                                     timestamp: txRow.timestamp,
@@ -702,8 +727,7 @@ function getBlocksFromIndex(startIndex) {
                                     rawDataJson: txRow.raw_data_json,
                                     rowHash: txRow.rowHash
                                 }));
-                                txResolve(parsedTxs);
-                            }
+                            txResolve(ordered);
                         });
                     });
 

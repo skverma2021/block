@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avalanche Effect</title>
+    <link rel="stylesheet" href="style.css">
+    <style> main { padding: 24px 20px; max-width: 700px; margin: 0 auto; } </style>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <div><h1>Avalanche Effect</h1><p class="subtitle">Interactive visualiser — lesson 2 of 6</p></div>
+    <a href="demo-blockchain_visualizer_demo.html" class="btn btn-ghost btn-sm">← All Lessons</a>
+  </div>
+</header>
+<main>
+  <div class="concept">A <strong>tiny change</strong> in input causes roughly half of the hash digits to change. This makes SHA-256 a reliable tamper detector.</div>
+  <div class="card">
+    <div class="card-title">Live Avalanche Effect</div>
+    <div class="form-group"><label>Input</label><textarea id="inputArea" rows="5" placeholder="Type here…"></textarea></div>
+    <div><label>SHA-256 Hash <span class="text-muted">(changed digits in red vs previous)</span></label><code class="hash" id="hashOutput">—</code></div>
+  </div>
+  <div class="insight"><strong>In our system:</strong> an attacker cannot nudge a reading to produce a similar hash. Any change causes a completely different <code>rowHash</code>.</div>
+</main>
+
+<script>
+    const inputArea = document.getElementById('inputArea');
+    const hashOutput = document.getElementById('hashOutput');
+    let previousHash = '';
+
+    async function computeHash(text) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+    }
+
+    function highlightDifferences(newHash, oldHash) {
+        let result = '';
+        for (let i = 0; i < newHash.length; i++) {
+            if (oldHash[i] !== newHash[i]) {
+                result += `<span class="changed">${newHash[i]}</span>`;
+            } else {
+                result += newHash[i];
+            }
+        }
+        return result;
+    }
+
+    inputArea.addEventListener('input', async () => {
+        const newHash = await computeHash(inputArea.value);
+        hashOutput.innerHTML = highlightDifferences(newHash, previousHash);
+        previousHash = newHash;
+    });
+</script>
+
+</body>
+</html>

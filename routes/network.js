@@ -27,6 +27,17 @@ let myNodeUrl = '';
 // All known peer URLs excluding self. Populated via registration endpoints.
 let networkNodes = [];
 
+// Normalise a node URL to bare origin (scheme://host:port), rejecting any
+// path component that crept in (e.g. http://localhost:3001/api → http://localhost:3001).
+function normalizeNodeUrl(raw) {
+    if (typeof raw !== 'string' || !raw) return null;
+    try {
+        return new URL(raw).origin;   // strips path, query, trailing slash
+    } catch {
+        return null;  // unparseable — caller should reject
+    }
+}
+
 // RegAuth availability state (project nodes only).
 let isRegAuthOnline   = true;
 let lastRegAuthCheck  = null;
@@ -181,10 +192,10 @@ async function flushPendingBroadcasts() {
 // TODO BUG-1: Internal axios.post calls are missing '/api' prefix.
 router.post('/register-and-broadcast-node', async (req, res) => {
     console.log(`Node ${myNodeUrl}: Registering and broadcasting new node...`);
-    const newNodeUrl = req.body.newNodeUrl;
+    const newNodeUrl = normalizeNodeUrl(req.body.newNodeUrl);
 
     if (!newNodeUrl) {
-        return res.status(400).json({ error: 'newNodeUrl is required.' });
+        return res.status(400).json({ error: 'newNodeUrl is required and must be a valid URL (scheme://host:port).' });
     }
 
     // Add the new node to this node's list if it's not already there and not self
@@ -206,7 +217,8 @@ router.post('/register-and-broadcast-node', async (req, res) => {
         await Promise.all(regPromises);
 
         // Send the new node the full list of known peers (including self).
-        const allNetworkNodes = [...networkNodes, myNodeUrl];
+        // Sanitise the outgoing list so any legacy bad entries are cleaned up.
+        const allNetworkNodes = [...networkNodes, myNodeUrl].map(normalizeNodeUrl).filter(Boolean);
         await axios.post(`${newNodeUrl}/api/network/register-nodes-bulk`, { allNetworkNodes });
 
         res.json({ note: 'New node registered with network and broadcasted.', networkNodes: networkNodes });
@@ -222,10 +234,10 @@ router.post('/register-and-broadcast-node', async (req, res) => {
 // register-and-broadcast-node is unavailable (e.g. during bug-fix testing).
 router.post('/register-node', (req, res) => {
     console.log(`Node ${myNodeUrl}: Received request to register node...`);
-    const newNodeUrl = req.body.newNodeUrl;
+    const newNodeUrl = normalizeNodeUrl(req.body.newNodeUrl);
 
     if (!newNodeUrl) {
-        return res.status(400).json({ error: 'newNodeUrl is required.' });
+        return res.status(400).json({ error: 'newNodeUrl is required and must be a valid URL (scheme://host:port).' });
     }
 
     if (!networkNodes.includes(newNodeUrl) && newNodeUrl !== myNodeUrl) {
@@ -248,9 +260,10 @@ router.post('/register-nodes-bulk', (req, res) => {
     }
 
     allNodes.forEach(nodeUrl => {
-        if (!networkNodes.includes(nodeUrl) && nodeUrl !== myNodeUrl) {
-            networkNodes.push(nodeUrl);
-            console.log(`Node ${myNodeUrl}: Added node ${nodeUrl} from bulk registration.`);
+        const normUrl = normalizeNodeUrl(nodeUrl);
+        if (normUrl && !networkNodes.includes(normUrl) && normUrl !== myNodeUrl) {
+            networkNodes.push(normUrl);
+            console.log(`Node ${myNodeUrl}: Added node ${normUrl} from bulk registration.`);
         }
     });
     console.log(`Node ${myNodeUrl}: Bulk registration successful. Current networkNodes:`, networkNodes);

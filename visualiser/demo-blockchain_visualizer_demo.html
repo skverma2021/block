@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blockchain Concepts — Interactive Visualiser</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    .av-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 600px) { .av-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <div>
+      <h1>Blockchain Concepts</h1>
+      <p class="subtitle">Interactive visualiser — pollution monitoring ledger demo</p>
+    </div>
+    <a href="/" class="btn btn-primary btn-sm">Live System →</a>
+  </div>
+</header>
+
+<nav class="tab-nav">
+  <button class="tab active" onclick="showTab('hash',this)">1 · Hashing</button>
+  <button class="tab" onclick="showTab('avalanche',this)">2 · Avalanche Effect</button>
+  <button class="tab" onclick="showTab('chain',this)">3 · Hash Chain</button>
+  <button class="tab" onclick="showTab('tamper',this)">4 · Tamper Evidence</button>
+  <button class="tab" onclick="showTab('merkle',this)">5 · Merkle Tree</button>
+  <button class="tab" onclick="showTab('mining',this)">6 · Mining &amp; PoA</button>
+</nav>
+
+<main>
+
+<!-- ═══ SECTION 1 — SHA-256 Hashing ═══════════════════════ -->
+<section id="tab-hash" class="tab-section active">
+  <div class="concept">
+    <strong>SHA-256</strong> converts any input into a fixed 64-character hexadecimal string
+    called a <strong>hash</strong>. The same input always produces the same hash.
+    There is no way to reverse the hash back to the original data.
+  </div>
+  <div class="card">
+    <div class="card-title">Live SHA-256 Hash</div>
+    <div class="card-hint">Type anything below. The hash updates instantly.</div>
+    <div class="form-group">
+      <label>Input</label>
+      <textarea id="h-input" rows="4" placeholder="Type anything here…" oninput="updateHash()"></textarea>
+    </div>
+    <div>
+      <label>SHA-256 Hash</label>
+      <code class="hash" id="h-output">—</code>
+    </div>
+  </div>
+  <div class="insight">
+    <strong>In our system:</strong> every sensor reading is hashed on arrival.
+    The hash (<code>rowHash</code>) is stored alongside the data.
+    If the reading is altered — even by one digit — the hash will not match
+    and the tamper is detected immediately.
+  </div>
+</section>
+
+<!-- ═══ SECTION 2 — Avalanche Effect ══════════════════════ -->
+<section id="tab-avalanche" class="tab-section">
+  <div class="concept">
+    The <strong>avalanche effect</strong> means a tiny change in input causes roughly
+    half the output digits to change. You cannot nudge the hash with a small change — any
+    modification produces a completely unpredictable new hash.
+  </div>
+  <div class="card">
+    <div class="card-title">Before / After Comparison</div>
+    <div class="card-hint">Edit the <em>Modified</em> box. Changed digits are highlighted in red.</div>
+    <div class="av-grid">
+      <div class="form-group">
+        <label>Original</label>
+        <textarea id="av-orig" rows="4" oninput="updateAvalanche()">Station A2: SO2=12, NO2=8, PM10=45</textarea>
+      </div>
+      <div class="form-group">
+        <label>Modified</label>
+        <textarea id="av-mod" rows="4" oninput="updateAvalanche()">Station A2: SO2=12, NO2=8, PM10=45</textarea>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:4px">
+      <div>
+        <label>Original Hash</label>
+        <code class="hash" id="av-orig-hash">—</code>
+      </div>
+      <div>
+        <label>Modified Hash <span class="text-muted">(changed digits in red)</span></label>
+        <code class="hash" id="av-mod-hash">—</code>
+      </div>
+    </div>
+    <div class="mt-12 text-muted text-sm" id="av-diff-count"></div>
+  </div>
+  <div class="insight">
+    <strong>In our system:</strong> an attacker cannot make a "small" falsification that
+    produces a similar hash. Any change to a sensor reading produces a completely different
+    <code>rowHash</code>, detectable by re-computing and comparing.
+  </div>
+</section>
+
+<!-- ═══ SECTION 3 — Hash Chain ═════════════════════════════ -->
+<section id="tab-chain" class="tab-section">
+  <div class="concept">
+    Each block includes the <strong>hash of the previous block</strong> as part of its
+    own content. This links blocks into a chain — you cannot silently change an old block
+    without also changing every block that follows it.
+  </div>
+  <div class="card">
+    <div class="card-title">3-Block Chain</div>
+    <div class="card-hint">Edit any block's data and watch the hashes cascade downstream.</div>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Block Data</th><th>Previous Hash</th><th>Block Hash</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>0</strong></td>
+          <td><textarea id="c-data-0" rows="2" oninput="updateChain()">Station A2: SO2=12</textarea></td>
+          <td><code class="hash" id="c-prev-0">GENESIS</code></td>
+          <td><code class="hash" id="c-hash-0">—</code></td>
+        </tr>
+        <tr>
+          <td><strong>1</strong></td>
+          <td><textarea id="c-data-1" rows="2" oninput="updateChain()">Station B1: SO2=15</textarea></td>
+          <td><code class="hash" id="c-prev-1">—</code></td>
+          <td><code class="hash" id="c-hash-1">—</code></td>
+        </tr>
+        <tr>
+          <td><strong>2</strong></td>
+          <td><textarea id="c-data-2" rows="2" oninput="updateChain()">Station C3: SO2=9</textarea></td>
+          <td><code class="hash" id="c-prev-2">—</code></td>
+          <td><code class="hash" id="c-hash-2">—</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="insight">
+    <strong>In our system:</strong>
+    <code>blockHash = SHA-256(index + timestamp + merkleRoot + prevHash + nonce + txIds)</code>.
+    Changing any field — including prevHash — produces a completely different hash.
+  </div>
+</section>
+
+<!-- ═══ SECTION 4 — Tamper Evidence ════════════════════════ -->
+<section id="tab-tamper" class="tab-section">
+  <div class="concept">
+    In a real blockchain the <strong>previous hash stored in each block is frozen at the
+    moment the network accepted it</strong>. If someone changes an old block's data later,
+    that block's hash changes — but the <em>next</em> block still holds the old (now wrong)
+    hash. The mismatch is visible to anyone who checks.
+  </div>
+  <div class="card">
+    <div class="card-title">Tamper a Block — Break the Chain</div>
+    <div class="card-hint">
+      <strong>Step 1:</strong> click Mine Chain to lock in the prevHash commitments.
+      <strong>Step 2:</strong> edit any block's data — downstream blocks turn red.
+    </div>
+    <div class="flex mb-12">
+      <button class="btn btn-success btn-sm" onclick="mineTamperChain()">⛏ Mine Chain</button>
+      <button class="btn btn-ghost btn-sm" onclick="resetTamperChain()">↺ Reset</button>
+      <span class="text-muted text-sm" id="tamper-status">Not yet mined</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Block Data</th><th>Frozen Prev Hash</th><th>Current Hash</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr id="tr-0">
+          <td><strong>0</strong></td>
+          <td><textarea id="td-0" rows="2" oninput="onTamperInput(0)">Station A2: SO2=12, NO2=8, PM10=45, PM2_5=22</textarea></td>
+          <td><code class="hash" id="tp-0">—</code></td>
+          <td><code class="hash" id="th-0">—</code></td>
+          <td><span id="ts-0" class="badge badge-muted">Not mined</span></td>
+        </tr>
+        <tr id="tr-1">
+          <td><strong>1</strong></td>
+          <td><textarea id="td-1" rows="2" oninput="onTamperInput(1)">Station B1: SO2=15, NO2=11, PM10=52, PM2_5=28</textarea></td>
+          <td><code class="hash" id="tp-1">—</code></td>
+          <td><code class="hash" id="th-1">—</code></td>
+          <td><span id="ts-1" class="badge badge-muted">Not mined</span></td>
+        </tr>
+        <tr id="tr-2">
+          <td><strong>2</strong></td>
+          <td><textarea id="td-2" rows="2" oninput="onTamperInput(2)">Station C3: SO2=9, NO2=7, PM10=38, PM2_5=19</textarea></td>
+          <td><code class="hash" id="tp-2">—</code></td>
+          <td><code class="hash" id="th-2">—</code></td>
+          <td><span id="ts-2" class="badge badge-muted">Not mined</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="insight">
+    <strong>In our system:</strong> <code>verifyChainIntegrity()</code> re-computes every
+    block hash from scratch and compares it to the stored value. Any mismatch triggers a
+    <code>CHAIN_INTEGRITY_FAILURE</code> alert in the <code>audit_log</code> table, and
+    the system can purge and resync from the Regulatory Authority node.
+  </div>
+</section>
+
+<!-- ═══ SECTION 5 — Merkle Tree ════════════════════════════ -->
+<section id="tab-merkle" class="tab-section">
+  <div class="concept">
+    A <strong>Merkle tree</strong> fingerprints all the transactions <em>within a single
+    block</em> into one value — the <strong>Merkle Root</strong>. This root is stored in
+    the block header. If any individual transaction is altered, the root changes,
+    the block hash changes, and the chain breaks.
+  </div>
+  <div class="card">
+    <div class="card-title">Merkle Root for One Block (4 transactions)</div>
+    <div class="card-hint">Each row is a <em>transaction</em> inside a single block. Edit any transaction.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div>
+        <table>
+          <thead><tr><th>Transaction (leaf)</th><th>rowHash</th></tr></thead>
+          <tbody>
+            <tr><td><textarea id="m-tx-0" rows="2" oninput="updateMerkle()">Tx1: Station A2, SO2=12, NO2=8</textarea></td><td><code class="hash" id="m-h-0">—</code></td></tr>
+            <tr><td><textarea id="m-tx-1" rows="2" oninput="updateMerkle()">Tx2: Station B1, SO2=15, NO2=11</textarea></td><td><code class="hash" id="m-h-1">—</code></td></tr>
+            <tr><td><textarea id="m-tx-2" rows="2" oninput="updateMerkle()">Tx3: Station C3, SO2=9, NO2=7</textarea></td><td><code class="hash" id="m-h-2">—</code></td></tr>
+            <tr><td><textarea id="m-tx-3" rows="2" oninput="updateMerkle()">Tx4: Station D5, SO2=18, NO2=14</textarea></td><td><code class="hash" id="m-h-3">—</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div class="tree-label" style="font-weight:600;margin-bottom:8px">Merkle Tree</div>
+        <div id="merkle-tree-viz"></div>
+        <div style="margin-top:12px">
+          <label>Merkle Root (stored in block header)</label>
+          <code class="hash tree-root" id="merkle-root-out">—</code>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="insight">
+    <strong>In our system:</strong> <code>merkleRoot = SHA-256 tree over all rowHash values</code>
+    in a block. Because the Merkle Root is part of the block hash formula, altering any
+    transaction changes the root, changes the block hash, and breaks the chain.
+  </div>
+</section>
+
+<!-- ═══ SECTION 6 — Mining & PoA ════════════════════════════ -->
+<section id="tab-mining" class="tab-section">
+  <div class="concept">
+    <strong>Proof of Work (PoW)</strong> blockchains require miners to find a nonce that
+    makes the block hash start with a set number of zeros. This is computationally expensive
+    but easy to verify.<br><br>
+    <strong>Our system uses Proof of Authority (PoA)</strong> — the Regulatory Authority
+    mines by right, not by computation. The nonce is always 0. No puzzle required.
+  </div>
+  <div class="card">
+    <div class="card-title">PoW Demo (for comparison only)</div>
+    <div class="card-hint">Adjust difficulty and click Mine. <strong>Our system skips this — RegAuth mines with nonce=0.</strong></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Block Data</label>
+        <textarea id="n-data" rows="3">Station A2: SO2=12, NO2=8, PM10=45</textarea>
+      </div>
+      <div class="form-group">
+        <label>Difficulty (leading zeros 1–4)</label>
+        <input type="range" id="n-diff" min="1" max="4" value="2"
+               oninput="document.getElementById('n-diff-val').textContent=this.value">
+        <div class="mt-8 text-sm">Zeros required: <strong id="n-diff-val">2</strong></div>
+      </div>
+    </div>
+    <div class="flex mb-12">
+      <button class="btn btn-primary btn-sm" onclick="startMining()">⛏ Mine Block</button>
+      <button class="btn btn-ghost btn-sm" onclick="stopMining()">■ Stop</button>
+      <span class="text-muted text-sm" id="n-status">Ready</span>
+    </div>
+    <table>
+      <thead><tr><th>Nonce Found</th><th>Iterations</th><th>Resulting Hash</th></tr></thead>
+      <tbody>
+        <tr>
+          <td id="n-nonce">—</td>
+          <td id="n-iters">—</td>
+          <td><code class="hash" id="n-hash">—</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="insight">
+    <strong>In our system (PoA):</strong> nonce is always <code>0</code>.
+    <code>blockHash = SHA-256(index + timestamp + merkleRoot + prevHash + 0 + txIds)</code>.
+    RegAuth mines the moment the mempool reaches <code>TRANSACTIONS_PER_BLOCK</code> entries.
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <p>Pollution Monitoring Blockchain · Version 0 — Proof of Authority demo ·
+    <a href="/">Live System</a>
+  </p>
+</footer>
+
+<script>
+/* ── Shared ───────────────────────────────────────────────── */
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (id === 'chain') updateChain();
+  if (id === 'merkle') updateMerkle();
+  if (id === 'avalanche') updateAvalanche();
+}
+
+/* ── Section 1: Hash ──────────────────────────────────────── */
+async function updateHash() {
+  document.getElementById('h-output').textContent =
+    await sha256(document.getElementById('h-input').value);
+}
+
+/* ── Section 2: Avalanche ─────────────────────────────────── */
+async function updateAvalanche() {
+  const orig = document.getElementById('av-orig').value;
+  const mod  = document.getElementById('av-mod').value;
+  const hO = await sha256(orig);
+  const hM = await sha256(mod);
+  document.getElementById('av-orig-hash').textContent = hO;
+  document.getElementById('av-mod-hash').innerHTML =
+    [...hM].map((c,i) => c !== hO[i] ? `<span class="changed">${c}</span>` : c).join('');
+  const n = [...hM].filter((c,i) => c !== hO[i]).length;
+  document.getElementById('av-diff-count').textContent =
+    `${n} of 64 hex digits changed (${((n/64)*100).toFixed(0)}%)`;
+}
+
+/* ── Section 3: Chain ─────────────────────────────────────── */
+async function updateChain() {
+  let prev = 'GENESIS';
+  for (let i = 0; i < 3; i++) {
+    document.getElementById(`c-prev-${i}`).textContent = prev;
+    const h = await sha256(prev + document.getElementById(`c-data-${i}`).value);
+    document.getElementById(`c-hash-${i}`).textContent = h;
+    prev = h;
+  }
+}
+
+/* ── Section 4: Tamper ────────────────────────────────────── */
+const T = { frozenPrev: ['GENESIS',null,null], hashes: [null,null,null], mined: false };
+
+async function mineTamperChain() {
+  let prev = 'GENESIS';
+  for (let i = 0; i < 3; i++) {
+    T.frozenPrev[i] = prev;
+    T.hashes[i] = await sha256(prev + document.getElementById(`td-${i}`).value);
+    prev = T.hashes[i];
+  }
+  T.mined = true;
+  document.getElementById('tamper-status').textContent = '✓ Mined — now edit a block';
+  renderTamper();
+}
+
+async function onTamperInput(i) {
+  if (!T.mined) { document.getElementById('tamper-status').textContent = '← Mine the chain first'; return; }
+  T.hashes[i] = await sha256(T.frozenPrev[i] + document.getElementById(`td-${i}`).value);
+  renderTamper();
+}
+
+function renderTamper() {
+  for (let i = 0; i < 3; i++) {
+    document.getElementById(`tp-${i}`).textContent = T.frozenPrev[i] || '—';
+    document.getElementById(`th-${i}`).textContent = T.hashes[i]     || '—';
+    const expectedPrev = i === 0 ? 'GENESIS' : T.hashes[i-1];
+    const valid = !T.mined || T.frozenPrev[i] === expectedPrev;
+    const b = document.getElementById(`ts-${i}`);
+    b.className = valid ? 'badge badge-valid' : 'badge badge-invalid';
+    b.textContent = valid ? '✓ VALID' : '✗ BROKEN';
+    document.getElementById(`tr-${i}`).className = T.mined ? (valid ? 'mined-row' : '') : '';
+  }
+}
+
+async function resetTamperChain() {
+  T.frozenPrev = ['GENESIS',null,null]; T.hashes = [null,null,null]; T.mined = false;
+  [0,1,2].forEach(i => document.getElementById(`td-${i}`).value = [
+    'Station A2: SO2=12, NO2=8, PM10=45, PM2_5=22',
+    'Station B1: SO2=15, NO2=11, PM10=52, PM2_5=28',
+    'Station C3: SO2=9, NO2=7, PM10=38, PM2_5=19'
+  ][i]);
+  for (let i = 0; i < 3; i++) {
+    ['tp','th'].forEach(p => document.getElementById(`${p}-${i}`).textContent = '—');
+    const b = document.getElementById(`ts-${i}`);
+    b.className = 'badge badge-muted'; b.textContent = 'Not mined';
+    document.getElementById(`tr-${i}`).className = '';
+  }
+  document.getElementById('tamper-status').textContent = 'Not yet mined';
+}
+
+/* ── Section 5: Merkle ────────────────────────────────────── */
+async function updateMerkle() {
+  let current = [];
+  for (let i = 0; i < 4; i++) {
+    const h = await sha256(document.getElementById(`m-tx-${i}`).value);
+    document.getElementById(`m-h-${i}`).textContent = h;
+    current.push(h);
+  }
+  const viz = document.getElementById('merkle-tree-viz');
+  viz.innerHTML = '';
+  let level = 1;
+  while (current.length > 1) {
+    const next = [];
+    const row  = document.createElement('div');
+    row.className = 'tree-level';
+    for (let i = 0; i < current.length; i += 2) {
+      const b = current[i+1] !== undefined ? current[i+1] : current[i];
+      const h = await sha256(current[i] + b);
+      next.push(h);
+      const n = document.createElement('div');
+      n.className = 'tree-node' + (next.length && current.length === 2 ? ' tree-root' : '');
+      n.textContent = h.slice(0,12) + '…';
+      n.title = h;
+      row.appendChild(n);
+    }
+    const lbl = document.createElement('div');
+    lbl.className = 'tree-label';
+    lbl.textContent = current.length === 2 ? 'Root' : `Level ${level++}`;
+    viz.appendChild(lbl);
+    viz.appendChild(row);
+    current = next;
+  }
+  document.getElementById('merkle-root-out').textContent = current[0] || '—';
+}
+
+/* ── Section 6: Mining ────────────────────────────────────── */
+let miningAbort = false;
+
+async function startMining() {
+  miningAbort = false;
+  const data   = document.getElementById('n-data').value;
+  const diff   = parseInt(document.getElementById('n-diff').value);
+  const target = '0'.repeat(diff);
+  document.getElementById('n-status').textContent = 'Mining…';
+  ['n-nonce','n-iters'].forEach(id => document.getElementById(id).textContent = '—');
+  document.getElementById('n-hash').textContent = '—';
+  let nonce = 0;
+  const t0 = performance.now();
+  while (!miningAbort) {
+    const h = await sha256('GENESIS' + data + nonce);
+    if (h.startsWith(target)) {
+      const s = ((performance.now()-t0)/1000).toFixed(2);
+      document.getElementById('n-nonce').textContent = nonce.toLocaleString();
+      document.getElementById('n-iters').textContent = `${nonce.toLocaleString()} (${s}s)`;
+      document.getElementById('n-hash').textContent  = h;
+      document.getElementById('n-status').textContent = `✓ Found in ${nonce.toLocaleString()} tries`;
+      return;
+    }
+    nonce++;
+    if (nonce % 300 === 0) await new Promise(r => setTimeout(r,0));
+  }
+  document.getElementById('n-status').textContent = 'Stopped';
+}
+
+function stopMining() { miningAbort = true; }
+
+/* ── Init ─────────────────────────────────────────────────── */
+window.addEventListener('load', () => {
+  updateHash(); updateAvalanche(); updateChain(); updateMerkle();
+});
+</script>
+
+</body>
+</html>
+

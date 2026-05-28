@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hash Chain</title>
+    <link rel="stylesheet" href="style.css">
+    <style> main { padding: 24px 20px; max-width: 900px; margin: 0 auto; } </style>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <div><h1>Hash Chain</h1><p class="subtitle">Interactive visualiser — lesson 3 of 6</p></div>
+    <a href="demo-blockchain_visualizer_demo.html" class="btn btn-ghost btn-sm">← All Lessons</a>
+  </div>
+</header>
+<main>
+  <div class="concept">Each block contains the <strong>hash of the previous block</strong>. Edit one block — every block below it changes.</div>
+  <div class="card">
+    <div class="card-title">3-Block Chain</div>
+    <tbody id="blockchain">
+        <tr>
+            <td class="prevHash">GENESIS</td>
+            <td><textarea oninput="updateHashes()"></textarea></td>
+            <td class="hash-cell currentHash">---</td>
+        </tr>
+        <tr>
+            <td class="prevHash">---</td>
+            <td><textarea oninput="updateHashes()"></textarea></td>
+            <td class="hash-cell currentHash">---</td>
+        </tr>
+        <tr>
+            <td class="prevHash">---</td>
+            <td><textarea oninput="updateHashes()"></textarea></td>
+            <td class="hash-cell currentHash">---</td>
+        </tr>
+    </tbody>
+</table>
+
+<script>
+    async function computeSHA256(text) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+    }
+
+    async function updateHashes() {
+        const table = document.getElementById('blockchain');
+        let prevHash = 'GENESIS';
+
+        for (let row of table.rows) {
+            const dataCell = row.cells[1].querySelector('textarea');
+            const prevHashCell = row.cells[0];
+            const currentHashCell = row.cells[2];
+
+            prevHashCell.textContent = prevHash;
+
+            const combinedData = prevHash + dataCell.value;
+            const currentHash = await computeSHA256(combinedData);
+
+            currentHashCell.textContent = currentHash;
+
+            prevHash = currentHash; // propagate hash downstream
+        }
+    }
+
+    // Initialize hashes on page load
+    window.onload = updateHashes;
+</script>
+
+</body>
+</html>

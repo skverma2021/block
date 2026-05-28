@@ -1,0 +1,292 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Pollution Monitoring Blockchain",
+    "description": "Version 0 — covers all 16 API routes.\n\nRequired variables (set via an environment):\n  nodeUrl     — node to target for most requests (default: RegAuth)\n  regAuthUrl  — RegAuth base URL\n  projAUrl    — Project-A node base URL\n  projBUrl    — Project-B node base URL\n\nStartup order:\n  1. Start all nodes (regAuth, projA, projB)\n  2. Run folder «00 — Network Setup» top-to-bottom once\n  3. Use remaining folders freely",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+
+    {
+      "name": "00 — Network Setup",
+      "description": "Run these once after starting all nodes to wire the peer lists.",
+      "item": [
+        {
+          "name": "Register projA with RegAuth (broadcast)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newNodeUrl\": \"{{projAUrl}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{regAuthUrl}}/api/network/register-and-broadcast-node",
+              "host": ["{{regAuthUrl}}"],
+              "path": ["api", "network", "register-and-broadcast-node"]
+            },
+            "description": "Registers projA with the whole network in one call:\n1. RegAuth adds projA to its peer list.\n2. RegAuth tells all existing peers about projA.\n3. RegAuth sends projA the full current peer list.\n\nResponse: { note, networkNodes[] }"
+          }
+        },
+        {
+          "name": "Register projB with RegAuth (broadcast)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newNodeUrl\": \"{{projBUrl}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{regAuthUrl}}/api/network/register-and-broadcast-node",
+              "host": ["{{regAuthUrl}}"],
+              "path": ["api", "network", "register-and-broadcast-node"]
+            },
+            "description": "Same as above for projB. After both calls every node knows every other node."
+          }
+        },
+        {
+          "name": "Register a single peer (direct — for testing)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newNodeUrl\": \"{{projAUrl}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{nodeUrl}}/api/network/register-node",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "network", "register-node"]
+            },
+            "description": "Adds a single peer to {{nodeUrl}}'s peer list only — no broadcast. Useful for debugging. Response: { note }"
+          }
+        },
+        {
+          "name": "Register multiple peers (bulk — for testing)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"allNetworkNodes\": [\n    \"{{projAUrl}}\",\n    \"{{projBUrl}}\"\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{nodeUrl}}/api/network/register-nodes-bulk",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "network", "register-nodes-bulk"]
+            },
+            "description": "Loads a full peer list into {{nodeUrl}} at once. Called automatically by register-and-broadcast-node; exposed here for manual use. Response: { note }"
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "01 — Transactions",
+      "item": [
+        {
+          "name": "Submit sensor reading",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projId\": \"1\",\n  \"submitterId\": \"inspector-01\",\n  \"stationID\": \"STA-A2\",\n  \"SO2\": 12.5,\n  \"NO2\": 8.0,\n  \"PM10\": 45.0,\n  \"PM2_5\": 22.0\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{nodeUrl}}/api/transactions/submit",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "transactions", "submit"]
+            },
+            "description": "Client-facing submission. The node assigns transactionId, timestamp, and rowHash, then broadcasts to all peers.\n\nResponse 201: { note, transaction, broadcastStatus }"
+          }
+        },
+        {
+          "name": "Receive transaction from peer (node-to-node)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"019601ab-0000-7000-8000-000000000001\",\n  \"timestamp\": \"2026-05-28T10:00:00.000Z\",\n  \"projId\": \"1\",\n  \"submitterId\": \"inspector-01\",\n  \"stationID\": \"STA-A2\",\n  \"SO2\": 12.5,\n  \"NO2\": 8.0,\n  \"PM10\": 45.0,\n  \"PM2_5\": 22.0,\n  \"rawDataJson\": \"{\\\"stationID\\\":\\\"STA-A2\\\",\\\"SO2\\\":12.5,\\\"NO2\\\":8.0,\\\"PM10\\\":45.0,\\\"PM2_5\\\":22.0}\",\n  \"rowHash\": \"<sha256-of-transactionId+timestamp+rawDataJson>\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{nodeUrl}}/api/transactions/receive",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "transactions", "receive"]
+            },
+            "description": "Called automatically by the submitting node to replicate a transaction to peers. The rowHash is validated on receipt.\n\nNote: Use «Submit sensor reading» for normal client use — this endpoint requires a pre-computed rowHash.\n\nResponse 201: { message, transaction }\nResponse 400: hash mismatch or missing fields\nResponse 409: duplicate transactionId"
+          }
+        },
+        {
+          "name": "List confirmed transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nodeUrl}}/api/transactions/",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "transactions", ""]
+            },
+            "description": "Returns all confirmed transactions (from mined blocks only — mempool not included).\n\nResponse 200: { transactions: [...] }"
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "02 — Blocks",
+      "item": [
+        {
+          "name": "Get full chain",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nodeUrl}}/api/blocks/chain",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "blocks", "chain"]
+            },
+            "description": "Returns every block on this node's chain including transactions.\n\nResponse 200: { chain: [...] }"
+          }
+        },
+        {
+          "name": "Get chain from index",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nodeUrl}}/api/blocks/chain-from/0",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "blocks", "chain-from", "0"]
+            },
+            "description": "Returns only blocks with index strictly greater than :startIndex. Used by project nodes to sync missed blocks on startup.\n\nChange 0 to any block index. Response 200: { blocks: [...] }"
+          }
+        },
+        {
+          "name": "Get last block index",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nodeUrl}}/api/blocks/last-index",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "blocks", "last-index"]
+            },
+            "description": "Returns the index of the most recently mined block. -1 means no blocks yet (empty chain).\n\nResponse 200: { lastIndex: N }"
+          }
+        },
+        {
+          "name": "Get chain hash",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nodeUrl}}/api/blocks/chain-hash",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "blocks", "chain-hash"]
+            },
+            "description": "Returns a rolling SHA-256 hash over all block hashes — a fast fingerprint of the whole chain.\n\nResponse 200: { chainHash: \"<hex>\" }"
+          }
+        },
+        {
+          "name": "Verify chain integrity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nodeUrl}}/api/blocks/verify-integrity",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "blocks", "verify-integrity"]
+            },
+            "description": "Re-computes every block hash, Merkle root, and prevHash link from scratch and compares to stored values.\n\nResponse 200: { valid: true }\nResponse 200: { valid: false, corruptedBlockIndex: N, errors: [...] }"
+          }
+        },
+        {
+          "name": "Get security alerts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nodeUrl}}/api/blocks/security-alerts",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "blocks", "security-alerts"]
+            },
+            "description": "Returns unresolved entries from audit_log (CHAIN_INTEGRITY_FAILURE, etc.).\n\nResponse 200: { alerts: [...], count: N, nodeUrl }"
+          }
+        },
+        {
+          "name": "Trigger mining manually",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{regAuthUrl}}/api/blocks/mine",
+              "host": ["{{regAuthUrl}}"],
+              "path": ["api", "blocks", "mine"]
+            },
+            "description": "Forces RegAuth to mine whatever is in the mempool immediately, regardless of whether TRANSACTIONS_PER_BLOCK threshold has been reached. Useful for demos.\n\nAlways send to {{regAuthUrl}} — only RegAuth (projId=0) mines blocks.\n\nResponse 200: { note, newBlock } or { note } if mempool is empty."
+          }
+        },
+        {
+          "name": "Receive block from RegAuth (node-to-node)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newBlock\": {\n    \"blockIndex\": 1,\n    \"timestamp\": \"2026-05-28T10:05:00.000Z\",\n    \"transactions\": [],\n    \"merkleRoot\": \"<sha256-of-merkle-tree>\",\n    \"previousBlockHash\": \"<hash-of-block-0>\",\n    \"nonce\": 0,\n    \"hash\": \"<sha256-of-block-content>\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{nodeUrl}}/api/blocks/receive",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "blocks", "receive"]
+            },
+            "description": "Called automatically by RegAuth after mining to distribute a new block to all peers. All 5 validation checks run on receipt (block structure, index sequence, prevHash link, block hash, Merkle root).\n\nNote: Normally called internally — exposing here for testing Check-4 and Check-5.\n\nResponse 200: { note: 'Block received and accepted.' }\nResponse 400: validation failure with reason"
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "03 — Network Status",
+      "item": [
+        {
+          "name": "Node health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nodeUrl}}/api/network/health",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "network", "health"]
+            },
+            "description": "Quick liveness check. Change {{nodeUrl}} to check any node.\n\nResponse 200: { status: 'online', nodeUrl, timestamp }"
+          }
+        },
+        {
+          "name": "RegAuth status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nodeUrl}}/api/network/regauth-status",
+              "host": ["{{nodeUrl}}"],
+              "path": ["api", "network", "regauth-status"]
+            },
+            "description": "Returns this node's view of RegAuth connectivity and pending broadcast queue.\n\nResponse 200: { isRegAuthOnline, lastCheck, pendingBroadcastCount, regAuthUrl }"
+          }
+        }
+      ]
+    }
+
+  ]
+}

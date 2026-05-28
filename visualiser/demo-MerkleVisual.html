@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merkle Tree Visualiser</title>
+    <link rel="stylesheet" href="style.css">
+    <style>main { padding: 24px 20px; max-width: 1000px; margin: 0 auto; }</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <div><h1>Merkle Tree Visualiser</h1><p class="subtitle">Interactive visualiser — lesson 5b of 6</p></div>
+    <a href="demo-blockchain_visualizer_demo.html" class="btn btn-ghost btn-sm">← All Lessons</a>
+  </div>
+</header>
+<main>
+<div class="concept">Visual Merkle tree builder: each leaf is block data, combined upward into a single root hash.</div>
+<div class="card">
+<div class="container">
+    <!-- Left: Block Inputs -->
+    <div class="block-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Block Data (Leaves)</th>
+                    <th>Data Hash</th>
+                </tr>
+            </thead>
+            <tbody id="blockchain">
+                <tr>
+                    <td><textarea oninput="updateMerkleTree()"></textarea></td>
+                    <td class="hash">---</td>
+                </tr>
+                <tr>
+                    <td><textarea oninput="updateMerkleTree()"></textarea></td>
+                    <td class="hash">---</td>
+                </tr>
+                <tr>
+                    <td><textarea oninput="updateMerkleTree()"></textarea></td>
+                    <td class="hash">---</td>
+                </tr>
+                <tr>
+                    <td><textarea oninput="updateMerkleTree()"></textarea></td>
+                    <td class="hash">---</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Right: Merkle Tree Visualization -->
+    <div class="tree-visual">
+        <h3>Merkle Tree Visualization</h3>
+        <div id="merkleTree">
+            <!-- Tree levels will be populated here -->
+        </div>
+        <h4 id="merkleRoot">Merkle Root: ---</h4>
+    </div>
+</div>
+
+<script>
+    async function computeSHA256(text) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+    }
+
+    async function updateMerkleTree() {
+        const rows = document.querySelectorAll('#blockchain tr');
+        let leafHashes = [];
+
+        // Compute Leaf Hashes
+        for (let row of rows) {
+            const dataText = row.cells[0].querySelector('textarea').value;
+            const hash = await computeSHA256(dataText);
+            row.cells[1].textContent = hash;
+            leafHashes.push(hash);
+        }
+
+        // Visualize Merkle Tree Levels
+        const treeContainer = document.getElementById('merkleTree');
+        treeContainer.innerHTML = ''; // Clear existing tree
+        let currentLevel = leafHashes;
+
+        let levelNumber = 1;
+        while (currentLevel.length > 1) {
+            const nextLevel = [];
+            const levelDiv = document.createElement('div');
+            levelDiv.className = 'tree-level';
+            levelDiv.innerHTML = `<strong>Level ${levelNumber}</strong><br>`;
+
+            for (let i = 0; i < currentLevel.length; i += 2) {
+                let combined;
+                if (i + 1 < currentLevel.length) {
+                    combined = currentLevel[i] + currentLevel[i + 1];
+                } else {
+                    combined = currentLevel[i] + currentLevel[i]; // duplicate if odd
+                }
+                const parentHash = await computeSHA256(combined);
+                nextLevel.push(parentHash);
+
+                const nodeDiv = document.createElement('div');
+                nodeDiv.className = 'node';
+                nodeDiv.textContent = parentHash.slice(0, 16) + '...'; // Shortened for clarity
+                levelDiv.appendChild(nodeDiv);
+            }
+
+            treeContainer.appendChild(levelDiv);
+            currentLevel = nextLevel;
+            levelNumber++;
+        }
+
+        document.getElementById('merkleRoot').textContent = 'Merkle Root: ' + currentLevel[0];
+    }
+
+    window.onload = updateMerkleTree;
+</script>
+
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pollution Monitoring Blockchain</title>
+  <link rel="stylesheet" href="/visualiser/style.css">
+  <style>
+    .conn-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+    .conn-bar input { flex:1; min-width:200px; }
+    #trust-banner { cursor:default; }
+    .block-summary { cursor:pointer; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+    .block-expand { display:none; }
+    .block-expand.open { display:block; }
+    .chain-wrap { display:flex; flex-direction:column; gap:12px; }
+    .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(0,0,0,.15); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:6px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    #no-conn { display:none; text-align:center; padding:40px; color:var(--text-muted); }
+    th { white-space:nowrap; }
+    .tx-table { font-size:12px; }
+    .sidebar { display:flex; flex-direction:column; gap:16px; }
+  </style>
+</head>
+<body>
+
+<!-- Trust Warning Banner -->
+<div id="trust-banner" class="trust-banner" role="alert">
+  <strong>⚠ Educational Demo System</strong> — This is a Version 0 proof-of-concept.
+  No TLS, no API authentication, HTTP only. Not for production use.
+  <button class="btn btn-ghost btn-sm" onclick="dismissBanner()" style="float:right;margin-top:-2px">Dismiss ✕</button>
+</div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <div>
+      <h1>Pollution Monitoring Blockchain</h1>
+      <p class="subtitle">Live node explorer — Proof of Authority</p>
+    </div>
+    <a href="/visualiser/demo-blockchain_visualizer_demo.html" class="btn btn-ghost btn-sm">Learn the Concepts →</a>
+  </div>
+</header>
+
+<main>
+  <!-- Connection bar -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="conn-bar">
+      <input type="url" id="node-url" value="" placeholder="http://localhost:3000" autocomplete="off">
+      <button class="btn btn-primary btn-sm" onclick="connectAndRefresh()">Connect</button>
+      <span id="conn-status" class="text-muted text-sm">Not connected</span>
+    </div>
+    <div class="text-muted text-sm">Auto-refreshes every 5 seconds when connected.</div>
+  </div>
+
+  <!-- Integrity alert -->
+  <div id="integrity-alert" style="display:none" class="alert-danger" role="alert"></div>
+
+  <div id="no-conn">Connect to a node using the bar above.</div>
+
+  <div id="main-layout" style="display:none">
+    <div class="layout-2col">
+
+      <!-- LEFT: Chain Explorer -->
+      <div>
+        <div class="card-title" style="margin-bottom:12px">Block Chain <span id="chain-spinner" style="display:none"><span class="spinner"></span></span></div>
+
+        <!-- Security alerts -->
+        <div id="alerts-wrap" style="display:none;margin-bottom:16px"></div>
+
+        <div id="chain-wrap" class="chain-wrap"></div>
+      </div>
+
+      <!-- RIGHT: Sidebar -->
+      <div class="sidebar">
+
+        <!-- Network Status -->
+        <div class="card">
+          <div class="card-title">Network Status</div>
+          <div id="network-status" class="text-muted text-sm">—</div>
+        </div>
+
+        <!-- Submit Transaction -->
+        <div class="card">
+          <div class="card-title">Submit Sensor Reading</div>
+          <div class="card-hint">Adds to mempool; mined when threshold reached.</div>
+          <form id="tx-form" onsubmit="submitTx(event)">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Project ID</label>
+                <input type="text" id="f-projId" placeholder="PROJ-001" required>
+              </div>
+              <div class="form-group">
+                <label>Submitter ID</label>
+                <input type="text" id="f-submitterId" placeholder="USER-01" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Station ID</label>
+              <input type="text" id="f-stationID" placeholder="STA-A2" required>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>SO₂ (μg/m³)</label>
+                <input type="number" id="f-SO2" step="0.01" placeholder="12.5" required>
+              </div>
+              <div class="form-group">
+                <label>NO₂ (μg/m³)</label>
+                <input type="number" id="f-NO2" step="0.01" placeholder="8.0" required>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>PM10 (μg/m³)</label>
+                <input type="number" id="f-PM10" step="0.01" placeholder="45.0" required>
+              </div>
+              <div class="form-group">
+                <label>PM2.5 (μg/m³)</label>
+                <input type="number" id="f-PM2_5" step="0.01" placeholder="22.0" required>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm" style="width:100%">Submit Reading</button>
+            <div id="tx-result" class="mt-8 text-sm" style="display:none"></div>
+          </form>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <p>Pollution Monitoring Blockchain · Version 0 — Proof of Authority ·
+    <a href="/visualiser/demo-blockchain_visualizer_demo.html">Learn the Concepts</a>
+  </p>
+</footer>
+
+<script>
+/* ── State ────────────────────────────────────────────── */
+let nodeUrl = '';
+let pollTimer = null;
+
+/* ── Init ─────────────────────────────────────────────── */
+window.addEventListener('load', () => {
+  if (!sessionStorage.getItem('banner-dismissed')) {
+    document.getElementById('trust-banner').style.display = 'block';
+  }
+  const url = window.location.origin !== 'null' ? window.location.origin : 'http://localhost:3000';
+  document.getElementById('node-url').value = url;
+  connectAndRefresh();
+});
+
+function dismissBanner() {
+  sessionStorage.setItem('banner-dismissed', '1');
+  document.getElementById('trust-banner').style.display = 'none';
+}
+
+/* ── Connection ───────────────────────────────────────── */
+function connectAndRefresh() {
+  clearInterval(pollTimer);
+  nodeUrl = document.getElementById('node-url').value.replace(/\/$/, '');
+  refreshAll();
+  pollTimer = setInterval(refreshAll, 5000);
+}
+
+async function refreshAll() {
+  try {
+    await Promise.all([loadChain(), loadNetwork(), loadAlerts()]);
+    document.getElementById('no-conn').style.display = 'none';
+    document.getElementById('main-layout').style.display = 'block';
+    document.getElementById('conn-status').textContent = '✓ Connected · ' + new Date().toLocaleTimeString();
+    document.getElementById('conn-status').style.color = 'var(--success)';
+  } catch (e) {
+    document.getElementById('no-conn').style.display = 'block';
+    document.getElementById('main-layout').style.display = 'none';
+    document.getElementById('conn-status').textContent = '✗ Cannot reach node';
+    document.getElementById('conn-status').style.color = 'var(--danger)';
+  }
+}
+
+/* ── Chain ────────────────────────────────────────────── */
+async function loadChain() {
+  document.getElementById('chain-spinner').style.display = 'inline';
+
+  const [chainRes, verifyRes] = await Promise.all([
+    fetch(nodeUrl + '/api/blocks/chain'),
+    fetch(nodeUrl + '/api/blocks/verify-integrity')
+  ]);
+  const { chain } = await chainRes.json();
+  const verify = await verifyRes.json();
+
+  document.getElementById('chain-spinner').style.display = 'none';
+
+  // Integrity alert
+  const ia = document.getElementById('integrity-alert');
+  if (!verify.valid) {
+    ia.style.display = 'block';
+    ia.textContent = '⚠ Chain integrity failure at block ' + verify.corruptedBlockIndex +
+      '. Errors: ' + (verify.errors || []).join('; ');
+  } else {
+    ia.style.display = 'none';
+  }
+
+  renderChain(chain);
+}
+
+function renderChain(chain) {
+  const wrap = document.getElementById('chain-wrap');
+  // Preserve expanded state
+  const expanded = new Set();
+  wrap.querySelectorAll('.block-expand.open').forEach(el => expanded.add(+el.dataset.idx));
+
+  wrap.innerHTML = '';
+  const blocks = [...chain].reverse();
+  for (const blk of blocks) {
+    const card = document.createElement('div');
+    card.className = 'block-card';
+    const txCount = blk.transactions ? blk.transactions.length : 0;
+    const isOpen = expanded.has(blk.blockIndex);
+
+    card.innerHTML = `
+      <div class="block-header block-summary" onclick="toggleBlock(this)">
+        <div>
+          <span class="badge badge-valid">#${blk.blockIndex}</span>
+          <span style="margin-left:8px;font-weight:600">${txCount} transaction${txCount!==1?'s':''}</span>
+        </div>
+        <div class="text-muted text-sm">${new Date(blk.timestamp).toLocaleString()}</div>
+        <div class="text-muted text-sm" style="font-family:monospace">${(blk.hash||'').slice(0,16)}…</div>
+        <span class="toggle-icon text-muted">${isOpen ? '▲' : '▼'}</span>
+      </div>
+      <div class="block-body block-expand${isOpen?' open':''}" data-idx="${blk.blockIndex}">
+        <div class="text-sm" style="margin-bottom:8px">
+          <strong>Block Hash:</strong> <code class="hash">${blk.hash||'—'}</code><br>
+          <strong>Merkle Root:</strong> <code class="hash">${blk.merkleRoot||'—'}</code><br>
+          <strong>Prev Hash:</strong> <code class="hash">${blk.previousBlockHash||'—'}</code>
+        </div>
+        ${txCount > 0 ? renderTxTable(blk.transactions) : '<div class="text-muted text-sm">(genesis block)</div>'}
+      </div>`;
+    wrap.appendChild(card);
+  }
+}
+
+function toggleBlock(header) {
+  const body = header.nextElementSibling;
+  const icon = header.querySelector('.toggle-icon');
+  body.classList.toggle('open');
+  icon.textContent = body.classList.contains('open') ? '▲' : '▼';
+}
+
+function renderTxTable(txs) {
+  const rows = txs.map(t => `<tr>
+    <td>${t.stationID||'—'}</td>
+    <td>${t.submitterId||'—'}</td>
+    <td>${t.SO2!=null?t.SO2:'—'}</td>
+    <td>${t.NO2!=null?t.NO2:'—'}</td>
+    <td>${t.PM10!=null?t.PM10:'—'}</td>
+    <td>${t.PM2_5!=null?t.PM2_5:'—'}</td>
+    <td><code style="font-size:11px">${(t.rowHash||'').slice(0,10)}…</code></td>
+  </tr>`).join('');
+  return `<table class="tx-table">
+    <thead><tr><th>Station</th><th>Submitter</th><th>SO₂</th><th>NO₂</th><th>PM10</th><th>PM2.5</th><th>rowHash</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+/* ── Network ──────────────────────────────────────────── */
+async function loadNetwork() {
+  const res = await fetch(nodeUrl + '/api/network/regauth-status');
+  const d = await res.json();
+  const status = d.isRegAuthOnline
+    ? `<span class="badge badge-valid">RegAuth Online</span>`
+    : `<span class="badge badge-invalid">RegAuth Offline</span>`;
+  document.getElementById('network-status').innerHTML = `
+    ${status}
+    <div class="mt-8">URL: <code>${d.regAuthUrl||'—'}</code></div>
+    <div>Pending broadcasts: <strong>${d.pendingBroadcastCount||0}</strong></div>
+    <div class="text-muted" style="font-size:11px">Last check: ${d.lastCheck ? new Date(d.lastCheck).toLocaleTimeString() : '—'}</div>`;
+}
+
+/* ── Alerts ───────────────────────────────────────────── */
+async function loadAlerts() {
+  const res = await fetch(nodeUrl + '/api/blocks/security-alerts');
+  const { alerts, count } = await res.json();
+  const wrap = document.getElementById('alerts-wrap');
+  if (!count) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  wrap.innerHTML = `<div class="alert-danger" style="margin-bottom:8px"><strong>⚠ ${count} unresolved security alert${count!==1?'s':''}</strong></div>` +
+    alerts.map(a => `<div class="alert-warning text-sm" style="margin-bottom:6px">
+      <strong>${a.event_type}</strong> (severity: ${a.severity}) — ${a.description||''}
+      <span class="text-muted"> · ${new Date(a.timestamp).toLocaleString()}</span>
+    </div>`).join('');
+}
+
+/* ── Submit Transaction ───────────────────────────────── */
+async function submitTx(e) {
+  e.preventDefault();
+  const resultEl = document.getElementById('tx-result');
+  resultEl.style.display = 'block';
+  resultEl.className = 'mt-8 text-sm text-muted';
+  resultEl.textContent = 'Submitting…';
+
+  const payload = {
+    projId:      document.getElementById('f-projId').value,
+    submitterId: document.getElementById('f-submitterId').value,
+    stationID:   document.getElementById('f-stationID').value,
+    SO2:    parseFloat(document.getElementById('f-SO2').value),
+    NO2:    parseFloat(document.getElementById('f-NO2').value),
+    PM10:   parseFloat(document.getElementById('f-PM10').value),
+    PM2_5:  parseFloat(document.getElementById('f-PM2_5').value)
+  };
+
+  try {
+    const res = await fetch(nodeUrl + '/api/transactions/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok) {
+      resultEl.className = 'mt-8 text-sm';
+      resultEl.style.color = 'var(--success)';
+      resultEl.textContent = '✓ ' + (data.note || 'Transaction submitted');
+      document.getElementById('tx-form').reset();
+      setTimeout(refreshAll, 1000);
+    } else {
+      resultEl.style.color = 'var(--danger)';
+      resultEl.textContent = '✗ ' + (data.error || data.message || 'Submission failed');
+    }
+  } catch (err) {
+    resultEl.style.color = 'var(--danger)';
+    resultEl.textContent = '✗ Network error: ' + err.message;
+  }
+}
+</script>
+</body>
+</html>

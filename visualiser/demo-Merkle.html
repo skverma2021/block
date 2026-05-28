@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Merkle Tree</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    main { padding: 24px 20px; max-width: 900px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <div><h1>Merkle Tree</h1><p class="subtitle">Interactive visualiser — lesson 5 of 6</p></div>
+    <a href="demo-blockchain_visualizer_demo.html" class="btn btn-ghost btn-sm">? All Lessons</a>
+  </div>
+</header>
+<main>
+  <div class="concept">
+    A <strong>Merkle tree</strong> produces a single fingerprint — the <strong>Merkle Root</strong> —
+    for all the <em>transactions inside one block</em>. If any transaction changes, the root changes,
+    the block hash changes, and the chain breaks.
+  </div>
+  <div class="card">
+    <div class="card-title">4 Transactions ? Merkle Root</div>
+    <div class="card-hint">Each row is a <em>transaction within a single block</em>. Edit any transaction.</div>
+    <table>
+      <thead><tr><th>Transaction (leaf data)</th><th>rowHash (SHA-256)</th></tr></thead>
+      <tbody>
+        <tr><td><textarea id="tx-0" rows="2" oninput="update()">Tx1: Station A2, SO2=12, NO2=8, PM10=45</textarea></td><td><code class="hash" id="h-0">—</code></td></tr>
+        <tr><td><textarea id="tx-1" rows="2" oninput="update()">Tx2: Station B1, SO2=15, NO2=11, PM10=52</textarea></td><td><code class="hash" id="h-1">—</code></td></tr>
+        <tr><td><textarea id="tx-2" rows="2" oninput="update()">Tx3: Station C3, SO2=9, NO2=7, PM10=38</textarea></td><td><code class="hash" id="h-2">—</code></td></tr>
+        <tr><td><textarea id="tx-3" rows="2" oninput="update()">Tx4: Station D5, SO2=18, NO2=14, PM10=61</textarea></td><td><code class="hash" id="h-3">—</code></td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top:16px">
+      <div id="tree-levels"></div>
+      <div style="margin-top:12px"><label>Merkle Root (stored in block header)</label>
+      <code class="hash tree-root" id="merkle-root">—</code></div>
+    </div>
+  </div>
+  <div class="insight">
+    <strong>In our system:</strong> <code>merkleRoot = SHA-256 tree over all rowHash values</code>.
+    It is included in <code>blockHash = SHA-256(index + timestamp + merkleRoot + prevHash + nonce + txIds)</code>.
+  </div>
+</main>
+
+<script>
+async function sha256(t) {
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+  return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,'0')).join('');
+}
+
+async function update() {
+  let leaves = [];
+  for (let i = 0; i < 4; i++) {
+    const h = await sha256(document.getElementById('tx-'+i).value);
+    document.getElementById('h-'+i).textContent = h;
+    leaves.push(h);
+  }
+  const viz = document.getElementById('tree-levels');
+  viz.innerHTML = '';
+  let cur = [...leaves];
+  let lvl = 1;
+  while (cur.length > 1) {
+    const next = [];
+    const row = document.createElement('div'); row.className = 'tree-level';
+    for (let i = 0; i < cur.length; i += 2) {
+      const b = cur[i+1] !== undefined ? cur[i+1] : cur[i];
+      const h = await sha256(cur[i] + b);
+      next.push(h);
+      const n = document.createElement('div');
+      n.className = 'tree-node'; n.textContent = h.slice(0,10)+'…'; n.title = h;
+      row.appendChild(n);
+    }
+    const lbl = document.createElement('div'); lbl.className = 'tree-label';
+    lbl.textContent = cur.length === 2 ? 'Root' : 'Level ' + lvl++;
+    viz.appendChild(lbl); viz.appendChild(row);
+    cur = next;
+  }
+  document.getElementById('merkle-root').textContent = cur[0] || '—';
+}
+
+window.addEventListener('load', update);
+</script>
+</body>
+</html>

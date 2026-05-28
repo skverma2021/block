@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nonce &amp; Mining</title>
+    <link rel="stylesheet" href="style.css">
+    <style> main { padding: 24px 20px; max-width: 900px; margin: 0 auto; } input[type=range]{width:100%;accent-color:var(--accent)} </style>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <div><h1>Nonce &amp; Mining</h1><p class="subtitle">Interactive visualiser — lesson 6 of 6</p></div>
+    <a href="demo-blockchain_visualizer_demo.html" class="btn btn-ghost btn-sm">← All Lessons</a>
+  </div>
+</header>
+<main>
+  <div class="concept"><strong>Proof of Work</strong> requires finding a nonce so the hash starts with N zeros. Our system uses <strong>PoA — nonce is always 0</strong>.</div>
+  <div class="card">
+    <div class="card-title">Single-Block Mining Demo</div>
+    <table>
+    <thead>
+        <tr>
+            <th>Prev Hash</th>
+            <th>Block Data</th>
+            <th>Zeros (max 4)</th>
+            <th>Nonce (Iterations)</th>
+            <th>Hash</th>
+        </tr>
+    </thead>
+    <tbody id="blockchain">
+        <tr>
+            <td class="prevHash">GENESIS</td>
+            <td><textarea oninput="mineBlock()"></textarea></td>
+            <td><input type="number" value="2" min="1" max="4" onchange="mineBlock()"></td>
+            <td class="nonce">---</td>
+            <td class="hash">---</td>
+        </tr>
+    </tbody>
+    </table>
+  </div>
+  <div class="insight"><strong>In our system (PoA):</strong> nonce is always <code>0</code>. RegAuth mines immediately — no puzzle, no energy cost.</div>
+</main>
+
+<script>
+    async function computeSHA256(text) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+    }
+
+    async function mineBlock() {
+        const row = document.querySelector('#blockchain tr');
+        const prevHashCell = row.querySelector('.prevHash');
+        const dataValue = row.querySelector('textarea').value;
+        const difficulty = parseInt(row.querySelector('input[type="number"]').value);
+        const nonceCell = row.querySelector('.nonce');
+        const hashCell = row.querySelector('.hash');
+
+        const targetPrefix = '0'.repeat(difficulty);
+        let nonce = 0;
+        let hash = '';
+
+        while (true) {
+            const combinedData = prevHashCell.textContent + dataValue + nonce;
+            hash = await computeSHA256(combinedData);
+            if (hash.startsWith(targetPrefix)) {
+                break; // Valid nonce found
+            }
+            nonce++;
+            // To avoid freezing browser during large loops, yield control
+            if (nonce % 500 === 0) await new Promise(r => setTimeout(r, 0));
+        }
+
+        nonceCell.textContent = nonce;
+        hashCell.textContent = hash;
+    }
+
+    window.onload = mineBlock;
+</script>
+
+</body>
+</html>

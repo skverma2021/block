@@ -54,14 +54,14 @@ let integrityCheckInterval;
 app.use(cors());          // Allow cross-origin requests (needed for the React dashboard).
 app.use(express.json()); // Parse JSON request bodies.
 
+app.use(express.static('frontend'));
+app.use('/visualiser', express.static('visualiser'));
+
 app.use('/api/transactions', transactionsRoutes);
 app.use('/api/blocks',       blocksRouter);
 app.use('/api/network',      network.router);
 
-// Root — quick human-readable health check.
-app.get('/', (req, res) => {
-    res.send(`Node ${PORT} | Role: ${REG_AUTH_ID === '0' ? 'RegAuth' : 'Project'} | URL: ${MY_NODE_URL}`);
-});
+
 
 // Global error handler — catches any error passed via next(err).
 app.use((err, req, res, next) => {
@@ -134,6 +134,13 @@ async function performIntegrityCheck() {
         
         if (!localIntegrity.valid) {
             console.error(`Node ${MY_NODE_URL}: LOCAL CHAIN CORRUPTION DETECTED at block ${localIntegrity.corruptedBlockIndex}!`);
+            if (String(REG_AUTH_ID) === '0') {
+                // RegAuth IS the authoritative source — resyncing from itself would wipe the chain
+                // permanently with no recovery path. Log and halt further action; manual intervention required.
+                console.error(`Node ${MY_NODE_URL}: RegAuth detected corruption in its own chain. NOT purging — RegAuth cannot resync from itself.`);
+                console.error(`Node ${MY_NODE_URL}: Restart RegAuth to re-create genesis and rebuild the chain.`);
+                return;
+            }
             console.log(`Node ${MY_NODE_URL}: Initiating force resync...`);
             await forceResyncFromRegAuth();
             return;
